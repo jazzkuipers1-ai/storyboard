@@ -203,6 +203,7 @@
       const rows = await window.SB_DATA.listProjects();
       return rows.map(r => ({
         id: r.id, name: r.name, type: r.type, color: r.color, archived: r.archived,
+        isOwner: r.isOwner,
         entry: `./?project=${encodeURIComponent(r.id)}`,
       }));
     }
@@ -230,18 +231,23 @@
       card.innerHTML = `
         <div class="cover" style="background:${p.color}">
           ${p.name[0].toUpperCase()}
+          ${p.isOwner === false ? '' : `
           <div class="kebab-wrap">
             <button class="card-menu-btn" title="More">⋯</button>
             <div class="card-menu" style="display:none"></div>
-          </div>
+          </div>`}
         </div>
         <div class="body">
           <div class="name">${p.name}</div>
-          <div class="meta"><span class="badge">${p.badge || (p.type === 'film' ? 'Film' : 'Series')}</span></div>
+          <div class="meta">
+            <span class="badge">${p.badge || (p.type === 'film' ? 'Film' : 'Series')}</span>
+            ${p.isOwner === false ? '<span class="badge">Shared with you</span>' : ''}
+          </div>
         </div>`;
       card.onclick = () => {
         window.location.href = p.entry || './?project=' + encodeURIComponent(p.id);
       };
+      if (p.isOwner === false) return card; // collaborators can't archive/delete, only the owner can
       const menuBtn = card.querySelector('.card-menu-btn');
       const menu = card.querySelector('.card-menu');
       const items = [];

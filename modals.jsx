@@ -561,11 +561,44 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
 }
 
 // ── Share Modal ────────────────────────────────────────────
-function ShareModal({ scope, scenes = [], onClose, onToast }) {
+function ShareModal({ scope, scenes = [], isFilm, onClose, onToast }) {
   const [perm, setPerm] = useState("comment");
   const isGroup = scope?.type === "group";
   const slug = isGroup ? scope.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "camino-s1";
   const url = `https://storyboard.app/p/${slug}-9f3a7c`;
+  const projectId = window.STORY.PROJECT?.id;
+
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [inviting, setInviting] = useState(false);
+  const loadMembers = () => {
+    if (!projectId) { setMembersLoading(false); return; }
+    window.SB_DATA.listMembers(projectId).then(list => { setMembers(list); setMembersLoading(false); });
+  };
+  useEffect(loadMembers, [projectId]);
+
+  async function invitePerson() {
+    if (!projectId) return;
+    const email = window.prompt("Invite by email:");
+    if (!email || !email.trim()) return;
+    setInviting(true);
+    try {
+      const projectName = window.STORY.PROJECT?.name || "this storyboard";
+      await window.SB_DATA.inviteMember(projectId, email);
+      await window.SB_DATA.sendInviteEmail({ projectId, projectName, toEmail: email });
+      loadMembers();
+      onToast?.(`Invited ${email.trim()}`);
+    } catch (err) {
+      onToast?.(err.message?.includes("duplicate") ? "That person already has access" : "Couldn't send invite");
+    } finally {
+      setInviting(false);
+    }
+  }
+  async function removePerson(id) {
+    if (!window.confirm("Remove this person's access?")) return;
+    await window.SB_DATA.removeMember(id);
+    loadMembers();
+  }
 
   const candidates = useMemo(() => {
     const list = isGroup ? scenes.filter(s => s.group === scope.name) : scenes;
@@ -649,7 +682,7 @@ function ShareModal({ scope, scenes = [], onClose, onToast }) {
                       {s.slug}
                     </span>
                     <span style={{color:"var(--ink-3)",fontFamily:"var(--mono)",fontSize:11,flexShrink:0}}>
-                      EP{ep?.n}·SC{s.scene}{s.shootDay ? ` · D${s.shootDay}` : ""}
+                      {isFilm ? "" : `EP${ep?.n}·`}SC{s.scene}{s.shootDay ? ` · D${s.shootDay}` : ""}
                     </span>
                   </label>
                 );
@@ -667,16 +700,26 @@ function ShareModal({ scope, scenes = [], onClose, onToast }) {
             </select>
           </div>
           <div>
-            <div className="section-h" style={{marginBottom:8}}>People with access · {window.STORY.TEAM.length}</div>
+            <div className="section-h" style={{marginBottom:8}}>People with access · {members.length}</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {window.STORY.TEAM.map(t => (
-                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10}}>
-                  <Avatar user={t.id} size={28}/>
-                  <div style={{flex:1,fontSize:13}}>
-                    {t.name}
-                    <div style={{fontSize:11,color:"var(--ink-3)"}}>{t.role}</div>
+              {membersLoading && <div style={{fontSize:12,color:"var(--ink-3)"}}>Loading…</div>}
+              {!membersLoading && members.length === 0 && (
+                <div style={{fontSize:12,color:"var(--ink-3)"}}>Only you have access so far.</div>
+              )}
+              {members.map(m => (
+                <div key={m.id} style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{
+                    width:28,height:28,borderRadius:"50%",flexShrink:0,
+                    background:"var(--bg-sunk)",border:"1px solid var(--line)",
+                    display:"inline-flex",alignItems:"center",justifyContent:"center",
+                    fontSize:11.5,fontWeight:600,color:"var(--ink-2)",
+                  }}>{m.email[0].toUpperCase()}</span>
+                  <div style={{flex:1,fontSize:13,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {m.email}
                   </div>
-                  <span style={{fontSize:12,color:"var(--ink-3)"}}>Editor</span>
+                  <button className="modal-x" title="Remove access" onClick={() => removePerson(m.id)}>
+                    <Icon name="close" size={12}/>
+                  </button>
                 </div>
               ))}
             </div>
@@ -686,8 +729,8 @@ function ShareModal({ scope, scenes = [], onClose, onToast }) {
           display:"flex",justifyContent:"space-between",alignItems:"center",
           padding:"12px 20px",borderTop:"1px solid var(--line)",
         }}>
-          <button className="btn ghost" style={{fontSize:12}}>
-            <Icon name="plus" size={13}/> Invite people
+          <button className="btn ghost" style={{fontSize:12}} onClick={invitePerson} disabled={inviting}>
+            <Icon name="plus" size={13}/> {inviting ? "Inviting…" : "Invite people"}
           </button>
           <button className="btn primary" onClick={onClose}>Done · {pickedCount} scene{pickedCount!==1?"s":""}</button>
         </div>

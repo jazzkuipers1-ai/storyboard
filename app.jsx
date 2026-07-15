@@ -897,7 +897,7 @@ function App() {
           onPrint={() => { setShowPrint(false); setToast("Opening print dialog…"); setTimeout(() => window.print(), 250); }}
         />
       )}
-      {showShare && <ShareModal scope={shareScope} scenes={scenes} onClose={() => setShowShare(false)} onToast={setToast}/>}
+      {showShare && <ShareModal scope={shareScope} scenes={scenes} isFilm={isFilm} onClose={() => setShowShare(false)} onToast={setToast}/>}
 
       {toast && <div className="toast">{toast}</div>}
 

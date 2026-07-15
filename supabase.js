@@ -56,13 +56,14 @@
   async function listProjects() {
     const session = await getSession();
     if (!session) return [];
+    // No user_id filter here — RLS already returns the union of projects this
+    // account owns *and* projects it's been invited to (project_members).
     const { data, error } = await sb
       .from("projects")
       .select("*")
-      .eq("user_id", session.user.id)
       .order("created_at", { ascending: true });
     if (error) { console.error("[SB_DATA] listProjects", error); return []; }
-    return data;
+    return data.map((r) => ({ ...r, isOwner: r.user_id === session.user.id }));
   }
   async function getProject(id) {
     const { data, error } = await sb.from("projects").select("*").eq("id", id).maybeSingle();
@@ -97,5 +98,41 @@
     if (error) throw error;
   }
 
-  window.SB_DATA = { listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData };
+  // ── Collaborators — invited by email, granted access via RLS the moment
+  // they sign in with a matching address (see project_members policies) ──
+  async function listMembers(projectId) {
+    const { data, error } = await sb.from("project_members").select("*").eq("project_id", projectId).order("created_at", { ascending: true });
+    if (error) { console.error("[SB_DATA] listMembers", error); return []; }
+    return data;
+  }
+  async function inviteMember(projectId, email) {
+    const session = await getSession();
+    const row = { project_id: projectId, email: email.toLowerCase().trim(), invited_by: session?.user?.id || null };
+    const { data, error } = await sb.from("project_members").insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+  async function removeMember(id) {
+    const { error } = await sb.from("project_members").delete().eq("id", id);
+    if (error) throw error;
+  }
+  // Fire-and-forget notification email — the access grant already happened via
+  // the RLS-protected insert above; this is just a courtesy heads-up.
+  async function sendInviteEmail({ projectId, projectName, toEmail }) {
+    const session = await getSession();
+    try {
+      await fetch("/api/invite-member", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, projectName, toEmail, fromEmail: session?.user?.email || "" }),
+      });
+    } catch (err) {
+      console.error("[SB_DATA] sendInviteEmail", err);
+    }
+  }
+
+  window.SB_DATA = {
+    listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
+    listMembers, inviteMember, removeMember, sendInviteEmail,
+  };
 })();
