@@ -199,33 +199,16 @@
       window.location.href = 'login.html';
     };
 
-    // The seed demo ("The Camino") is static content shown to every account —
-    // only its archived state is per-browser (low-stakes UI preference, not
-    // real project data, so localStorage is fine here). Real projects with
-    // actual scene/location data live in Supabase, scoped per-user via RLS.
-    const SEED = [
-      { id: 'camino', name: 'The Camino', type: 'series', color: '#9C6A3F', badge: 'S1 · 4 EP', seeded: true, entry: 'index.html' },
-    ];
-
     async function loadProjects() {
-      const seedOverrides = JSON.parse(localStorage.getItem('sb_seed_overrides') || '{}');
-      const seeds = SEED.map(s => ({ ...s, archived: !!(seedOverrides[s.id] && seedOverrides[s.id].archived) }));
       const rows = await window.SB_DATA.listProjects();
-      const custom = rows.map(r => ({
+      return rows.map(r => ({
         id: r.id, name: r.name, type: r.type, color: r.color, archived: r.archived,
         entry: `./?project=${encodeURIComponent(r.id)}`,
       }));
-      return [...seeds, ...custom];
     }
 
     async function archiveProject(id, archived) {
-      if (id === 'camino') {
-        const seedOverrides = JSON.parse(localStorage.getItem('sb_seed_overrides') || '{}');
-        seedOverrides[id] = { archived };
-        localStorage.setItem('sb_seed_overrides', JSON.stringify(seedOverrides));
-      } else {
-        await window.SB_DATA.updateProject(id, { archived });
-      }
+      await window.SB_DATA.updateProject(id, { archived });
       render();
     }
     async function deleteProject(id) {
@@ -267,9 +250,7 @@
       } else {
         items.push(['Archive project', () => archiveProject(p.id, true), false]);
       }
-      if (!p.seeded) {
-        items.push([p.archived ? 'Delete permanently' : 'Delete project', () => deleteProject(p.id), true]);
-      }
+      items.push([p.archived ? 'Delete permanently' : 'Delete project', () => deleteProject(p.id), true]);
       menu.innerHTML = items.map(([label, , danger], i) =>
         `<button data-i="${i}"${danger ? ' class="danger"' : ''}>${label}</button>`
       ).join('');
