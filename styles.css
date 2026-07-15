@@ -721,6 +721,8 @@ input, textarea { font-family: inherit; color: inherit; }
   resize: none;
   font-family: inherit;
   line-height: 1.4;
+  max-height: 20em;
+  overflow-y: auto;
 }
 .desc-edit:hover, .desc-edit:focus { border-color: var(--line); background: var(--bg-sunk); }
 .desc-edit::placeholder { color: var(--ink-4); }

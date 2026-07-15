@@ -185,7 +185,7 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
           onClick={stop}
           onChange={e => setDesc(e.target.value)}
           onBlur={() => onUpdate({ notes: desc })}
-          rows={2}
+          rows={size === "lg" ? 6 : 4}
         />
         <div className="foot">
           <div className="scriptday-edit">
