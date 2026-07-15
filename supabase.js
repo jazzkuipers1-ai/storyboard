@@ -97,6 +97,20 @@
     const { error } = await sb.from("project_data").upsert(row, { onConflict: "project_id" });
     if (error) throw error;
   }
+  // Live sync: fires on any change to this project's data, from any device or
+  // collaborator (Realtime is enabled on the project_data table). Returns an
+  // unsubscribe function.
+  function subscribeToProjectData(projectId, onChange) {
+    const channel = sb
+      .channel("project_data:" + projectId)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "project_data", filter: "project_id=eq." + projectId },
+        (payload) => onChange(payload.new)
+      )
+      .subscribe();
+    return () => sb.removeChannel(channel);
+  }
 
   // ── Collaborators — invited by email, granted access via RLS the moment
   // they sign in with a matching address (see project_members policies) ──
@@ -133,6 +147,7 @@
 
   window.SB_DATA = {
     listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
+    subscribeToProjectData,
     listMembers, inviteMember, removeMember, sendInviteEmail,
   };
 })();

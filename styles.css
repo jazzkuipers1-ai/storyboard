@@ -211,6 +211,13 @@ input, textarea { font-family: inherit; color: inherit; }
   flex-shrink: 0;
 }
 .spacer { flex: 1; }
+.save-state {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--ink-3);
+  flex-shrink: 0;
+}
+.save-state .spin { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .btn {
   appearance: none;
   border: 1px solid var(--line);
@@ -555,7 +562,9 @@ input, textarea { font-family: inherit; color: inherit; }
   flex-shrink: 0;
 }
 .tb-sc-input {
-  width: 26px;
+  /* Wide enough for imported chrono ids like "1.13pl" or "4.01a", not just
+     the plain 2-digit numbers ("02") the field was originally sized for. */
+  width: 52px;
   border: 1px solid transparent;
   background: transparent;
   font-family: var(--mono);

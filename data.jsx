@@ -208,6 +208,7 @@ window.STORY_READY = (async function () {
     window.STORY.SCENES = projectData?.scenes || [];
     window.STORY.EPISODES = projectData?.episodes || [];
     window.STORY.SUGGESTIONS = projectData?.suggestions || [];
+    window.STORY.GROUP_NAMES = projectData?.group_names || [];
     window.STORY.PROJECT = { id: projectId, name: project.name, type: project.type };
   } catch (err) {
     console.error("Failed to load project data", err);

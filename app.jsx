@@ -45,10 +45,54 @@ function App() {
   const [scenes, setScenes] = useState(window.STORY.SCENES);
   const [suggestions, setSuggestions] = useState(window.STORY.SUGGESTIONS);
   const [groupNames, setGroupNames] = useState(() => {
-    const s = new Set();
+    const s = new Set(window.STORY.GROUP_NAMES || []);
     window.STORY.SCENES.forEach(sc => { if (sc.group) s.add(sc.group); });
     return [...s];
   });
+  const [saveState, setSaveState] = useState("saved"); // saved | saving | error
+
+  // ── Autosave + live sync ──────────────────────────────────
+  // Every edit (photos, notes, status, groups, ...) is debounced and written
+  // straight to Supabase, so it survives a refresh and shows up on any other
+  // device or collaborator signed into this project. A Realtime subscription
+  // does the reverse: picks up their edits and merges them in here.
+  const skipNextSaveRef = useRef(true); // the very first render is just the data we loaded, not a new edit
+  const lastSyncedRef = useRef(JSON.stringify({ scenes, groupNames, suggestions }));
+  useEffect(() => {
+    if (!project?.id) return;
+    if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
+    const json = JSON.stringify({ scenes, groupNames, suggestions });
+    if (json === lastSyncedRef.current) return; // this state just arrived *from* the server via realtime
+    setSaveState("saving");
+    const timer = setTimeout(async () => {
+      try {
+        await window.SB_DATA.saveProjectData(project.id, {
+          scenes, episodes: window.STORY.EPISODES, group_names: groupNames, suggestions,
+        });
+        lastSyncedRef.current = json;
+        setSaveState("saved");
+      } catch (err) {
+        console.error("Autosave failed", err);
+        setSaveState("error");
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [scenes, groupNames, suggestions]);
+
+  useEffect(() => {
+    if (!project?.id) return;
+    return window.SB_DATA.subscribeToProjectData(project.id, (row) => {
+      const json = JSON.stringify({ scenes: row.scenes, groupNames: row.group_names, suggestions: row.suggestions });
+      if (json === lastSyncedRef.current) return; // echo of our own save
+      lastSyncedRef.current = json;
+      skipNextSaveRef.current = true; // applying it below shouldn't bounce straight back out as a save
+      if (row.episodes) window.STORY.EPISODES = row.episodes;
+      setScenes(row.scenes || []);
+      setGroupNames(row.group_names || []);
+      setSuggestions(row.suggestions || []);
+    });
+  }, [project?.id]);
+
   const [view, setView] = useState("grid"); // grid | groups | map
   const [filter, setFilter] = useState({ kind: "all", value: null }); // all | episode | country | status | group
   const [search, setSearch] = useState("");
@@ -797,6 +841,12 @@ function App() {
             <div className="sub">{isFilm ? "Feature film" : project ? "Series" : "Season 1 · 4 episodes"}</div>
           </div>
         </div>
+
+        <span className="save-state" title={saveState === "error" ? "Couldn't save — check your connection" : ""}>
+          {saveState === "saving" && <><span className="spin" style={{width:11,height:11,border:"1.5px solid var(--line)",borderTopColor:"var(--ink-3)",borderRadius:"50%"}}/>Saving…</>}
+          {saveState === "saved" && <><Icon name="check" size={11}/>Saved</>}
+          {saveState === "error" && <span style={{color:"var(--danger)"}}>Not saved</span>}
+        </span>
 
         <div className="view-toggle">
           <button className={view === "grid" ? "active" : ""} onClick={() => setView("grid")}>

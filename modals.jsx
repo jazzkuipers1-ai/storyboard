@@ -173,12 +173,12 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
               <div className="row" style={{marginTop:10,gap:8,alignItems:"center"}}>
                 <span style={{fontSize:11.5,color:"var(--ink-3)",fontFamily:"var(--mono)"}}>SC</span>
                 <input
-                  type="number"
+                  type="text"
                   value={sceneNum}
                   onChange={e => setSceneNum(e.target.value)}
-                  onBlur={() => onUpdate({ scene: Number(sceneNum) || scene.scene })}
+                  onBlur={() => onUpdate({ scene: sceneNum.trim() || scene.scene })}
                   style={{
-                    width:56,border:"1px solid var(--line)",borderRadius:6,
+                    width:72,border:"1px solid var(--line)",borderRadius:6,
                     padding:"5px 8px",fontSize:13,fontFamily:"var(--mono)",background:"var(--bg)",
                   }}
                 />

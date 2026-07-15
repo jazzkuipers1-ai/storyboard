@@ -121,7 +121,7 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
           value={num}
           onClick={stop}
           onChange={e => setNum(e.target.value)}
-          onBlur={() => onUpdate({ scene: Number(num) || scene.scene })}
+          onBlur={() => onUpdate({ scene: num.trim() || scene.scene })}
         />
         <input
           className="tb-loc"
