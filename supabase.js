@@ -14,6 +14,16 @@
   async function signOut() {
     return await sb.auth.signOut();
   }
+  // Sends a reset link (not the password itself — nothing can retrieve a real
+  // password, it's only ever stored hashed). The link lands on reset-password.html.
+  async function resetPasswordForEmail(email) {
+    return await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + "/reset-password.html",
+    });
+  }
+  async function updatePassword(newPassword) {
+    return await sb.auth.updateUser({ password: newPassword });
+  }
   async function getSession() {
     const { data } = await sb.auth.getSession();
     return data.session;
@@ -38,5 +48,5 @@
     return session;
   }
 
-  window.SB_AUTH = { signUp, signIn, signOut, getSession, onAuthChange, syncAuthFlag };
+  window.SB_AUTH = { signUp, signIn, signOut, getSession, onAuthChange, syncAuthFlag, resetPasswordForEmail, updatePassword };
 })();

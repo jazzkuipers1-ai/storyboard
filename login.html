@@ -63,6 +63,12 @@
   }
   .login-btn:hover { background: var(--ink-2); }
   .login-btn:disabled { opacity: .6; cursor: default; }
+  .login-link {
+    display: block; width: 100%; margin-top: 10px;
+    background: none; border: 0; cursor: pointer;
+    font-size: 12px; color: var(--ink-3); text-align: center; text-decoration: underline;
+  }
+  .login-link:hover { color: var(--ink-2); }
   .login-err {
     display: none; margin-top: 10px;
     font-size: 12.5px; color: var(--danger);
@@ -100,7 +106,19 @@
         <input type="password" id="siPassword" placeholder="••••••••" required />
       </div>
       <button type="submit" class="login-btn" id="siBtn">Sign in</button>
+      <button type="button" class="login-link" id="forgotLink">Forgot password?</button>
       <div class="login-err" id="siErr"></div>
+    </form>
+
+    <form class="form-panel" id="forgotForm">
+      <div class="field">
+        <label for="fpEmail">Email</label>
+        <input type="email" id="fpEmail" placeholder="you@production.com" required />
+      </div>
+      <button type="submit" class="login-btn" id="fpBtn">Send reset link</button>
+      <button type="button" class="login-link" id="backToSignin">Back to sign in</button>
+      <div class="login-err" id="fpErr"></div>
+      <div class="login-ok" id="fpOk"></div>
     </form>
 
     <form class="form-panel" id="signupForm">
@@ -129,18 +147,62 @@
     })();
 
     const tabs = document.querySelectorAll('.login-tabs button');
+    const tabBar = document.querySelector('.login-tabs');
     const panels = { signin: document.getElementById('signinForm'), signup: document.getElementById('signupForm') };
+    const forgotForm = document.getElementById('forgotForm');
     const subtext = document.getElementById('subtext');
     tabs.forEach(btn => {
       btn.onclick = () => {
         tabs.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         Object.values(panels).forEach(p => p.classList.remove('active'));
+        forgotForm.classList.remove('active');
         panels[btn.dataset.tab].classList.add('active');
         subtext.textContent = btn.dataset.tab === 'signin'
           ? 'Sign in to access your location boards'
           : 'Create an account to start scouting locations';
       };
+    });
+
+    document.getElementById('forgotLink').onclick = () => {
+      tabBar.style.display = 'none';
+      panels.signin.classList.remove('active');
+      forgotForm.classList.add('active');
+      subtext.textContent = "Enter your email and we'll send you a reset link";
+      document.getElementById('fpEmail').value = document.getElementById('siEmail').value;
+    };
+    document.getElementById('backToSignin').onclick = () => {
+      tabBar.style.display = 'flex';
+      forgotForm.classList.remove('active');
+      panels.signin.classList.add('active');
+      subtext.textContent = 'Sign in to access your location boards';
+      document.getElementById('fpErr').style.display = 'none';
+      document.getElementById('fpOk').style.display = 'none';
+    };
+
+    forgotForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const email = document.getElementById('fpEmail').value.trim();
+      const err = document.getElementById('fpErr');
+      const ok = document.getElementById('fpOk');
+      const btn = document.getElementById('fpBtn');
+      err.style.display = 'none';
+      ok.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      try {
+        const { error } = await window.SB_AUTH.resetPasswordForEmail(email);
+        if (error) {
+          err.textContent = error.message;
+          err.style.display = 'block';
+          return;
+        }
+        ok.textContent = `If an account exists for ${email}, a reset link is on its way.`;
+        ok.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send reset link';
+      }
     });
 
     document.getElementById('signinForm').addEventListener('submit', async function (e) {
