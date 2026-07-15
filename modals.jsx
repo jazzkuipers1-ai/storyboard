@@ -89,8 +89,8 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                 <Placeholder country={ep?.country} hint={photos[activePhoto]} aspect="auto"/>
               )}
               <div style={{position:"absolute",top:12,left:12,display:"flex",gap:6}}>
-                <span className={`tag ${scene.intExt.toLowerCase()}`}>{scene.intExt}</span>
-                <span className={`tag ${scene.dn.toLowerCase()}`}>{scene.dn}</span>
+                <span className={`tag ${tagCls(scene.intExt)}`}>{scene.intExt}</span>
+                <span className={`tag ${tagCls(scene.dn)}`}>{scene.dn}</span>
               </div>
               {isUploaded(activePhoto) && (
                 <button className="photo-remove" title="Remove photo" onClick={removeActivePhoto}>
@@ -274,13 +274,15 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
 
 // ── PDF Import Modal ───────────────────────────────────────
 function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
-  const [stage, setStage] = useState("drop"); // drop | parsing | preview
+  const [stage, setStage] = useState("drop"); // drop | parsing | preview | error
   const [over, setOver] = useState(false);
   const [filename, setFilename] = useState("");
   const [parsed, setParsed] = useState([]);
   const [selected, setSelected] = useState({});
+  const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
 
-  // simulated parsed scenes — these become the "new" scenes
+  // demo fallback — used only via the explicit "sample" link, not real imports
   const SAMPLE_PARSE = [
     { tmpId:"p1", episode:"ep4", scene:7,  intExt:"INT", dn:"NIGHT", slug:"GASTHAUS HIRSCH — DINING ROOM",       address:"Hauptstraße 14, Schluchsee, Germany",            country:"Germany" },
     { tmpId:"p2", episode:"ep4", scene:8,  intExt:"EXT", dn:"DAY",   slug:"BAHNHOFSPLATZ — TITISEE",              address:"Bahnhof Titisee, Germany",                       country:"Germany" },
@@ -291,23 +293,50 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
     { tmpId:"p7", episode:"ep3", scene:7,  intExt:"INT", dn:"DAY",   slug:"CENTRAAL STATION — PLATFORM 2A",       address:"Stationsplein 1, Amsterdam",                     country:"The Netherlands" },
   ];
 
-  function startParse(name) {
-    setFilename(name);
+  function finishParse(list) {
+    setParsed(list);
+    const sel = {};
+    list.forEach(p => sel[p.tmpId] = true);
+    setSelected(sel);
+    setStage("preview");
+  }
+
+  function useSample() {
+    setFilename("Camino_S1_Schedule_v4.pdf (sample)");
     setStage("parsing");
-    setTimeout(() => {
-      setParsed(SAMPLE_PARSE);
-      const sel = {};
-      SAMPLE_PARSE.forEach(p => sel[p.tmpId] = true);
-      setSelected(sel);
-      setStage("preview");
-    }, 1400);
+    setTimeout(() => finishParse(SAMPLE_PARSE), 900);
+  }
+
+  async function parseFile(file) {
+    setFilename(file.name);
+    setError("");
+    setStage("parsing");
+    try {
+      const scenes = await window.parseChronoPdf(file);
+      if (!scenes.length) {
+        setError(`No scenes recognized in "${file.name}". This importer expects a "Chrono Script Order" export.`);
+        setStage("error");
+        return;
+      }
+      finishParse(scenes);
+    } catch (err) {
+      console.error(err);
+      setError(`Couldn't read "${file.name}": ${err.message || err}`);
+      setStage("error");
+    }
   }
 
   function onDrop(e) {
     e.preventDefault();
     setOver(false);
     const f = e.dataTransfer.files[0];
-    startParse(f?.name || "shootingschedule.pdf");
+    if (f) parseFile(f);
+  }
+
+  function onPick(e) {
+    const f = e.target.files[0];
+    if (f) parseFile(f);
+    e.target.value = "";
   }
 
   function confirm() {
@@ -319,11 +348,17 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
   const wide = stage === "preview";
   const stats = useMemo(() => {
     const list = parsed.filter(p => selected[p.tmpId]);
+    const slugRoot = s => (s || "").split("—")[0].trim();
+    const buckets = {};
+    list.forEach(p => { const k = slugRoot(p.slug); if (k) (buckets[k] = buckets[k] || []).push(p); });
+    const groupCount = Object.values(buckets).filter(g => g.length >= 2).length;
     return {
       total: list.length,
       int: list.filter(p => p.intExt === "INT").length,
       ext: list.filter(p => p.intExt === "EXT").length,
+      inte: list.filter(p => p.intExt === "I+E").length,
       eps: [...new Set(list.map(p => p.episode))].length,
+      groupCount,
     };
   }, [parsed, selected]);
 
@@ -341,11 +376,12 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
               <Icon name="upload" size={15}/>
             </span>
             <div>
-              <div style={{fontSize:13,fontWeight:600}}>Import from Fuzzlecheck</div>
+              <div style={{fontSize:13,fontWeight:600}}>Import scenes from PDF</div>
               <div style={{fontSize:11.5,color:"var(--ink-3)"}}>
-                {stage === "drop" && "Drop your shooting schedule PDF"}
+                {stage === "drop" && "Drop a Chrono Script Order or Fuzzlecheck PDF"}
                 {stage === "parsing" && `Reading ${filename}…`}
                 {stage === "preview" && `${parsed.length} scenes found in ${filename}`}
+                {stage === "error" && `Couldn't parse ${filename}`}
               </div>
             </div>
           </div>
@@ -359,21 +395,22 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
               onDragOver={e => { e.preventDefault(); setOver(true); }}
               onDragLeave={() => setOver(false)}
               onDrop={onDrop}
-              onClick={() => startParse("Camino_S1_Schedule_v4.pdf")}
+              onClick={() => fileInputRef.current?.click()}
             >
+              <input ref={fileInputRef} type="file" accept="application/pdf" style={{display:"none"}} onChange={onPick}/>
               <div className="icon"><Icon name="file" size={22}/></div>
-              <h3>Drop your Fuzzlecheck export here</h3>
-              <p>or click to use the sample <code style={{fontFamily:"var(--mono)"}}>Camino_S1_Schedule_v4.pdf</code></p>
+              <h3>Drop a schedule PDF here</h3>
+              <p>Chrono Script Order exports are parsed for real — click to browse, or <a href="#" style={{color:"var(--accent)"}} onClick={e => { e.stopPropagation(); e.preventDefault(); useSample(); }}>use the sample</a> instead.</p>
               <p style={{marginTop:10}}>
-                We'll detect <b style={{color:"var(--ink-2)"}}>INT/EXT</b>, <b style={{color:"var(--ink-2)"}}>Day/Night</b>, <b style={{color:"var(--ink-2)"}}>Scene #</b>, <b style={{color:"var(--ink-2)"}}>Episode</b>, <b style={{color:"var(--ink-2)"}}>Country</b> and <b style={{color:"var(--ink-2)"}}>Address</b>.
+                We'll detect <b style={{color:"var(--ink-2)"}}>INT/EXT</b>, <b style={{color:"var(--ink-2)"}}>Day/Night</b>, <b style={{color:"var(--ink-2)"}}>Scene #</b>, <b style={{color:"var(--ink-2)"}}>Country</b> and <b style={{color:"var(--ink-2)"}}>Location</b>.
               </p>
               <div className="examples">
                 <span className="ex">INT.</span>
                 <span className="ex">EXT.</span>
                 <span className="ex">DAY</span>
                 <span className="ex">NIGHT</span>
-                <span className="ex">EP 101</span>
-                <span className="ex">SC 14</span>
+                <span className="ex">1.01</span>
+                <span className="ex">2.34p1</span>
               </div>
             </div>
           )}
@@ -387,11 +424,19 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
               }}/>
               <div style={{fontFamily:"var(--serif)",fontSize:20,marginBottom:4}}>Parsing schedule…</div>
               <div style={{color:"var(--ink-3)",fontSize:12.5}}>Detecting scene slugs, episode markers and locations</div>
-              <div style={{marginTop:18,display:"flex",justifyContent:"center",gap:18,fontSize:11.5,color:"var(--ink-3)",fontFamily:"var(--mono)"}}>
-                <span>✓ 7 scene headers</span>
-                <span>✓ 4 episodes</span>
-                <span>✓ 4 countries</span>
-              </div>
+            </div>
+          )}
+
+          {stage === "error" && (
+            <div style={{padding:"30px 20px",textAlign:"center"}}>
+              <div style={{
+                width:36,height:36,borderRadius:"50%",margin:"0 auto 14px",
+                background:"color-mix(in oklch, var(--danger) 14%, transparent)",
+                display:"flex",alignItems:"center",justifyContent:"center",color:"var(--danger)",
+              }}><Icon name="close" size={16}/></div>
+              <div style={{fontFamily:"var(--serif)",fontSize:20,marginBottom:6}}>Couldn't parse that file</div>
+              <div style={{color:"var(--ink-3)",fontSize:12.5,maxWidth:380,margin:"0 auto"}}>{error}</div>
+              <button className="btn ghost" style={{marginTop:16}} onClick={() => setStage("drop")}>Try another file</button>
             </div>
           )}
 
@@ -432,8 +477,8 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
                              onChange={e => setSelected({ ...selected, [p.tmpId]: e.target.checked })}/>
                       <div className="ep">{ep?.n}·{String(p.scene).padStart(2,"0")}</div>
                       <div style={{display:"flex",gap:4}}>
-                        <span className={`tag ${p.intExt.toLowerCase()}`}>{p.intExt}</span>
-                        <span className={`tag ${p.dn.toLowerCase()}`}>{p.dn}</span>
+                        <span className={`tag ${tagCls(p.intExt)}`}>{p.intExt}</span>
+                        <span className={`tag ${tagCls(p.dn)}`}>{p.dn}</span>
                       </div>
                       <div>
                         <div style={{fontWeight:500}}>{p.slug}</div>
@@ -453,8 +498,8 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
               <div className="parse-summary">
                 <Icon name="sparkle" size={16}/>
                 <div style={{flex:1}}>
-                  <b style={{color:"var(--ink)"}}>{stats.total} scenes</b> ready to import — {stats.int} interior, {stats.ext} exterior, across {stats.eps} episodes.
-                  We'll also suggest <b style={{color:"var(--ink)"}}>2 new location groups</b> after import.
+                  <b style={{color:"var(--ink)"}}>{stats.total} scenes</b> ready to import — {stats.int} interior, {stats.ext} exterior{stats.inte ? `, ${stats.inte} both` : ""}, across {stats.eps} {isFilm ? "countries" : "episodes"}.
+                  {stats.groupCount > 0 && <> We'll also suggest <b style={{color:"var(--ink)"}}>{stats.groupCount} new location group{stats.groupCount !== 1 ? "s" : ""}</b> after import.</>}
                 </div>
               </div>
             </div>

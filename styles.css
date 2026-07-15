@@ -449,13 +449,17 @@ input, textarea { font-family: inherit; color: inherit; }
 }
 .tag.int  { background: oklch(0.93 0.04 240); color: oklch(0.35 0.12 240); }
 .tag.ext  { background: oklch(0.92 0.06 130); color: oklch(0.32 0.13 150); }
+.tag.inte { background: oklch(0.92 0.05 190); color: oklch(0.35 0.1 190); }
 .tag.day  { background: oklch(0.95 0.07 85);  color: oklch(0.45 0.13 65); }
 .tag.night{ background: oklch(0.32 0.05 280); color: oklch(0.92 0.04 280); }
+.tag.dawn { background: oklch(0.90 0.06 340); color: oklch(0.4 0.13 340); }
 [data-theme="cinema"] .tag { background: rgba(255,255,255,0.06); color: var(--ink-2); }
 [data-theme="cinema"] .tag.int  { background: rgba(120,160,220,.16); color: oklch(0.82 0.1 240); }
 [data-theme="cinema"] .tag.ext  { background: rgba(140,200,140,.16); color: oklch(0.82 0.12 140); }
+[data-theme="cinema"] .tag.inte { background: rgba(120,190,190,.16); color: oklch(0.82 0.1 190); }
 [data-theme="cinema"] .tag.day  { background: rgba(230,180,90,.18); color: oklch(0.85 0.13 80); }
 [data-theme="cinema"] .tag.night{ background: rgba(120,120,200,.18); color: oklch(0.82 0.08 270); }
+[data-theme="cinema"] .tag.dawn { background: rgba(220,140,180,.18); color: oklch(0.82 0.12 340); }
 
 .card .title {
   font-size: 14px;

@@ -1,6 +1,9 @@
 // components.jsx — shared UI: icons, cards, placeholders, sidebar bits
 const { useState, useEffect } = React;
 
+// CSS class for a tag value ("I+E" isn't a valid class token as-is)
+function tagCls(v) { return v === "I+E" ? "inte" : v.toLowerCase(); }
+
 
 // ── Icons (single-stroke, 16px) ────────────────────────────
 function Icon({ name, size=16 }) {
@@ -149,16 +152,18 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
       </div>
       <div className="meta">
         <div className="ribbon">
-          <select className={`tag ${scene.intExt.toLowerCase()} tag-select`} value={scene.intExt} onClick={stop}
+          <select className={`tag ${tagCls(scene.intExt)} tag-select`} value={scene.intExt} onClick={stop}
                   onChange={e => onUpdate({ intExt: e.target.value })}>
             <option value="INT">INT</option>
             <option value="EXT">EXT</option>
+            <option value="I+E">I+E</option>
           </select>
-          <select className={`tag ${scene.dn.toLowerCase()} tag-select`} value={scene.dn} onClick={stop}
+          <select className={`tag ${tagCls(scene.dn)} tag-select`} value={scene.dn} onClick={stop}
                   onChange={e => onUpdate({ dn: e.target.value })}>
             <option value="DAY">DAY</option>
             <option value="NIGHT">NIGHT</option>
             <option value="DUSK">DUSK</option>
+            <option value="DAWN">DAWN</option>
           </select>
         </div>
         <input
@@ -249,16 +254,18 @@ function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onD
       </div>
       {!isFilm && <span className="row-ep">EP {ep?.n}</span>}
       <span className="row-sc">SC {String(scene.scene).padStart(2,"0")}</span>
-      <select className={`tag ${scene.intExt.toLowerCase()} tag-select`} value={scene.intExt} onClick={stop}
+      <select className={`tag ${tagCls(scene.intExt)} tag-select`} value={scene.intExt} onClick={stop}
               onChange={e => onUpdate({ intExt: e.target.value })}>
         <option value="INT">INT</option>
         <option value="EXT">EXT</option>
+        <option value="I+E">I+E</option>
       </select>
-      <select className={`tag ${scene.dn.toLowerCase()} tag-select`} value={scene.dn} onClick={stop}
+      <select className={`tag ${tagCls(scene.dn)} tag-select`} value={scene.dn} onClick={stop}
               onChange={e => onUpdate({ dn: e.target.value })}>
         <option value="DAY">DAY</option>
         <option value="NIGHT">NIGHT</option>
         <option value="DUSK">DUSK</option>
+        <option value="DAWN">DAWN</option>
       </select>
       <input className="row-loc" value={loc} onClick={stop}
              onChange={e => setLoc(e.target.value)}
@@ -310,8 +317,8 @@ function PrintSheets({ scenes, isFilm, perPage, computePrintPages }) {
                     </div>
                     <div className="print-meta">
                       <div className="print-ribbon">
-                        <span className={`tag ${s.intExt.toLowerCase()}`}>{s.intExt}</span>
-                        <span className={`tag ${s.dn.toLowerCase()}`}>{s.dn}</span>
+                        <span className={`tag ${tagCls(s.intExt)}`}>{s.intExt}</span>
+                        <span className={`tag ${tagCls(s.dn)}`}>{s.dn}</span>
                         <span style={{marginLeft:"auto",fontFamily:"var(--mono)",fontSize:10}}>
                           {!isFilm && `EP ${ep?.n} · `}SC {String(s.scene).padStart(2,"0")}
                         </span>
