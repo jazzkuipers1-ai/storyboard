@@ -360,12 +360,14 @@
     let pendingImport = null; // { scenes, filename } once a PDF has been parsed
 
     function resetImportUI() {
+      const hadImport = !!pendingImport;
       pendingImport = null;
       document.getElementById('npDropzoneIdle').style.display = 'block';
       document.getElementById('npParsing').style.display = 'none';
       document.getElementById('npParsedSummary').style.display = 'none';
       document.getElementById('npError').style.display = 'none';
       document.getElementById('npFileInput').value = '';
+      if (hadImport) selectType('series');
     }
 
     async function parseImportFile(file) {
@@ -383,8 +385,12 @@
           return;
         }
         pendingImport = { scenes, filename: file.name };
+        // A Chrono Script Order is one continuous story, not discrete episodes —
+        // Film mode drops the "EP n" labels app-wide, so scene numbers like
+        // "1.21" (act.scene, from the schedule itself) show cleanly on their own.
+        selectType('film');
         const summary = document.getElementById('npParsedSummary');
-        summary.innerHTML = `<span>📄 <b>${scenes.length} scenes</b> found in ${file.name}</span><button type="button" class="modal-x x" title="Remove">✕</button>`;
+        summary.innerHTML = `<span>📄 <b>${scenes.length} scenes</b> found in ${file.name} — set to Film</span><button type="button" class="modal-x x" title="Remove">✕</button>`;
         summary.style.display = 'flex';
         summary.querySelector('.x').onclick = (e) => { e.stopPropagation(); resetImportUI(); };
       } catch (err) {
@@ -421,12 +427,12 @@
     document.getElementById('cancelNew').onclick = closeModal;
 
     let selType = 'series';
+    function selectType(type) {
+      selType = type;
+      document.querySelectorAll('.type-pick button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+    }
     document.querySelectorAll('.type-pick button').forEach(btn => {
-      btn.onclick = () => {
-        document.querySelectorAll('.type-pick button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        selType = btn.dataset.type;
-      };
+      btn.onclick = () => selectType(btn.dataset.type);
     });
 
     document.getElementById('createNew').onclick = async () => {
