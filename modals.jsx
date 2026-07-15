@@ -64,12 +64,21 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     }
     setUploading(true);
     try {
-      const resized = await Promise.all(files.map(f => resizeImage(f)));
+      // GPS lives in EXIF, which the resize (drawn through a <canvas>) strips —
+      // so it has to be read from the original file, before resizeImage runs.
+      const [resized, gpsHits] = await Promise.all([
+        Promise.all(files.map(f => resizeImage(f))),
+        Promise.all(files.map(f => window.extractPhotoGPS?.(f) ?? Promise.resolve(null))),
+      ]);
       const next = [...uploadedPhotos, ...resized.map(r => r.full)];
       const nextThumbs = [...(scene.photoThumbs || []), ...resized.map(r => r.thumb)];
-      onUpdate({ photos: next, photoThumbs: nextThumbs });
+      const geo = gpsHits.find(Boolean) || scene.geo;
+      const patch = { photos: next, photoThumbs: nextThumbs };
+      if (geo) patch.geo = geo;
+      onUpdate(patch);
       setActivePhoto(next.length - resized.length);
       if (all.length > files.length) onToast?.(`Only added ${files.length} — maximum ${MAX_PHOTOS} photos per card`);
+      if (gpsHits.some(Boolean) && !scene.geo) onToast?.("📍 Google Maps link updated from photo location");
     } finally {
       setUploading(false);
     }
@@ -95,7 +104,9 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     onUpdate({ group: val || null });
   }
 
-  const mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(scene.address);
+  // Prefer the exact spot a photo was taken (from its EXIF GPS) over the free-text address.
+  const mapsQuery = scene.geo ? `${scene.geo.lat},${scene.geo.lng}` : scene.address;
+  const mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapsQuery);
 
   return (
     <div className="modal-bg" onClick={onClose}>
@@ -219,6 +230,11 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                 <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
                   Open in Maps <Icon name="ext" size={11}/>
                 </a>
+                {scene.geo && (
+                  <span style={{marginLeft:8,fontSize:11,color:"var(--ink-3)"}} title={`${scene.geo.lat.toFixed(5)}, ${scene.geo.lng.toFixed(5)}`}>
+                    📍 from photo location
+                  </span>
+                )}
               </dd>
             </dl>
 
