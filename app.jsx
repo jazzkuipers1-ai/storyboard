@@ -100,8 +100,9 @@ function App() {
   const [showImport, setShowImport] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [shareScope, setShareScope] = useState(null); // null = whole storyboard, or { type:"group", name }
-  const [exportOpen, setExportOpen] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  const [printScenes, setPrintScenes] = useState(null); // subset picked in ExportModal, or null = all
   const [printPerPage, setPrintPerPage] = useState("smart"); // smart | 4 | 6 | 9
   const [toast, setToast] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
@@ -470,9 +471,10 @@ function App() {
     return { pages, perPage };
   }
 
-  function exportCSV() {
+  function exportCSV(list) {
+    const rows_ = list || scenes;
     const header = ["Episode","Scene","INT/EXT","Day/Night","Location","Address","Country","Status","Group","Script Day","Notes"];
-    const rows = scenes.map(s => {
+    const rows = rows_.map(s => {
       const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
       return [
         isFilm ? "" : ep?.n,
@@ -488,19 +490,19 @@ function App() {
     a.href = url; a.download = "camino-storyboard.csv";
     a.click();
     URL.revokeObjectURL(url);
-    setExportOpen(false);
-    setToast("CSV exported");
+    setToast(`${rows_.length} scene${rows_.length!==1?"s":""} exported as CSV`);
   }
-  function exportPDF() {
-    setExportOpen(false);
+  function exportPDF(list) {
+    setPrintScenes(list || scenes);
     setShowPrint(true);
   }
 
   // One row per bundled location (scenes sharing a group, or an identical slug
   // when ungrouped) — for a printable/shareable address list, not a per-scene sheet.
-  function exportLocationsCSV() {
+  function exportLocationsCSV(list) {
+    const clusters = list ? clusterByLocation(list) : locationClusters;
     const header = ["Location", "Address", "Scenes", "Episodes", "Countries"];
-    const rows = locationClusters.map(c => {
+    const rows = clusters.map(c => {
       const eps = [...new Set(c.scenes.map(s => {
         const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
         return ep ? `${ep.n}` : "";
@@ -519,8 +521,7 @@ function App() {
     a.href = url; a.download = "camino-locations.csv";
     a.click();
     URL.revokeObjectURL(url);
-    setExportOpen(false);
-    setToast("Locations CSV exported");
+    setToast(`${clusters.length} location${clusters.length!==1?"s":""} exported as CSV`);
   }
 
   // drag state for manual reorder
@@ -887,18 +888,9 @@ function App() {
         <button className="btn" onClick={() => setShowImport(true)}>
           <Icon name="upload" size={13}/><span className="label-text">Import PDF</span>
         </button>
-        <div style={{position:"relative"}}>
-          <button className="btn" onClick={() => setExportOpen(v => !v)}>
-            <Icon name="file" size={13}/><span className="label-text">Export</span>
-          </button>
-          {exportOpen && (
-            <div className="card-menu" style={{top:"calc(100% + 4px)",right:0,left:"auto"}} onMouseLeave={() => setExportOpen(false)}>
-              <button onClick={exportPDF}><Icon name="file" size={12}/>Export as PDF</button>
-              <button onClick={exportCSV}><Icon name="copy" size={12}/>Export scenes as CSV</button>
-              <button onClick={exportLocationsCSV}><Icon name="pin" size={12}/>Export locations as CSV</button>
-            </div>
-          )}
-        </div>
+        <button className="btn" onClick={() => setShowExport(true)}>
+          <Icon name="file" size={13}/><span className="label-text">Export</span>
+        </button>
         <button className="btn primary" onClick={() => setShareScope(null) || setShowShare(true)}>
           <Icon name="share" size={13}/><span className="label-text">Share</span>
         </button>
@@ -936,9 +928,19 @@ function App() {
           onImport={importScenes}
         />
       )}
+      {showExport && (
+        <ExportModal
+          scenes={scenes}
+          isFilm={isFilm}
+          onClose={() => setShowExport(false)}
+          onExportCSV={(list) => { exportCSV(list); setShowExport(false); }}
+          onExportLocationsCSV={(list) => { exportLocationsCSV(list); setShowExport(false); }}
+          onExportPDF={(list) => { setShowExport(false); exportPDF(list); }}
+        />
+      )}
       {showPrint && (
         <PrintModal
-          scenes={scenes}
+          scenes={printScenes || scenes}
           isFilm={isFilm}
           perPage={printPerPage}
           onSetPerPage={setPrintPerPage}
@@ -951,7 +953,7 @@ function App() {
 
       {toast && <div className="toast">{toast}</div>}
 
-      <PrintSheets scenes={scenes} isFilm={isFilm} perPage={printPerPage} computePrintPages={computePrintPages}/>
+      <PrintSheets scenes={printScenes || scenes} isFilm={isFilm} perPage={printPerPage} computePrintPages={computePrintPages}/>
 
       <TweaksPanel title="Tweaks">
         <TweakSection label="Aesthetic"/>

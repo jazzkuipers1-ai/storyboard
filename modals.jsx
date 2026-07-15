@@ -739,6 +739,131 @@ function ShareModal({ scope, scenes = [], isFilm, onClose, onToast }) {
   );
 }
 
+// ── Export Modal — pick exactly which scenes go into CSV/locations/PDF ────
+function ExportModal({ scenes, isFilm, onClose, onExportCSV, onExportLocationsCSV, onExportPDF }) {
+  const [picked, setPicked] = useState(() => {
+    const o = {};
+    scenes.forEach(s => o[s.id] = true);
+    return o;
+  });
+  const pickedCount = Object.values(picked).filter(Boolean).length;
+  const selectedScenes = useMemo(() => scenes.filter(s => picked[s.id]), [scenes, picked]);
+
+  function toggleAll(on) {
+    const o = {};
+    scenes.forEach(s => o[s.id] = on);
+    setPicked(o);
+  }
+  function isolate(matchFn) {
+    const o = {};
+    scenes.forEach(s => o[s.id] = matchFn(s));
+    setPicked(o);
+  }
+
+  const countries = useMemo(() => {
+    const set = new Set();
+    scenes.forEach(s => {
+      const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
+      if (ep?.country) set.add(ep.country);
+    });
+    return [...set];
+  }, [scenes]);
+  const groups = useMemo(() => {
+    const set = new Set();
+    scenes.forEach(s => { if (s.group) set.add(s.group); });
+    return [...set];
+  }, [scenes]);
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal narrow" onClick={e => e.stopPropagation()} style={{flexDirection:"column"}}>
+        <div className="modal-head">
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{
+              width:28,height:28,borderRadius:7,
+              background:"var(--bg-sunk)",
+              display:"inline-flex",alignItems:"center",justifyContent:"center",
+            }}><Icon name="file" size={14}/></span>
+            <div>
+              <div style={{fontSize:13,fontWeight:600}}>Export</div>
+              <div style={{fontSize:11.5,color:"var(--ink-3)"}}>Choose what to include</div>
+            </div>
+          </div>
+          <button className="modal-x" onClick={onClose}><Icon name="close" size={14}/></button>
+        </div>
+
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14,overflowY:"auto"}}>
+          <div>
+            <div className="section-h" style={{marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span>Scenes to include · {pickedCount}/{scenes.length}</span>
+              <span style={{display:"flex",gap:8}}>
+                <button className="btn ghost" style={{fontSize:11,padding:"3px 8px"}} onClick={() => toggleAll(true)}>All</button>
+                <button className="btn ghost" style={{fontSize:11,padding:"3px 8px"}} onClick={() => toggleAll(false)}>None</button>
+              </span>
+            </div>
+
+            {(countries.length > 1 || groups.length > 0) && (
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+                {countries.map(c => (
+                  <button key={"c-"+c} className="chip" style={{fontSize:11.5}}
+                    onClick={() => isolate(s => window.STORY.EPISODES.find(e => e.id === s.episode)?.country === c)}
+                  >{c}</button>
+                ))}
+                {groups.map(g => (
+                  <button key={"g-"+g} className="chip" style={{fontSize:11.5}}
+                    onClick={() => isolate(s => s.group === g)}
+                  >{g}</button>
+                ))}
+              </div>
+            )}
+
+            <div style={{
+              border:"1px solid var(--line)",borderRadius:8,
+              maxHeight:240,overflowY:"auto",background:"var(--bg-elev)",
+            }}>
+              {scenes.map(s => {
+                const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
+                return (
+                  <label key={s.id} style={{
+                    display:"flex",alignItems:"center",gap:9,
+                    padding:"7px 10px",borderBottom:"1px solid var(--line-soft)",
+                    fontSize:12.5,cursor:"default",
+                  }}>
+                    <input type="checkbox" className="toggle"
+                           checked={!!picked[s.id]}
+                           onChange={e => setPicked({ ...picked, [s.id]: e.target.checked })}/>
+                    <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {s.slug}
+                    </span>
+                    <span style={{color:"var(--ink-3)",fontFamily:"var(--mono)",fontSize:11,flexShrink:0}}>
+                      {isFilm ? "" : `EP${ep?.n}·`}SC{s.scene}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",
+          padding:"12px 20px",borderTop:"1px solid var(--line)",
+        }}>
+          <button className="btn ghost" onClick={() => onExportLocationsCSV(selectedScenes)} disabled={!pickedCount}>
+            <Icon name="pin" size={12}/>Locations CSV
+          </button>
+          <button className="btn ghost" onClick={() => onExportCSV(selectedScenes)} disabled={!pickedCount}>
+            <Icon name="copy" size={12}/>Scenes CSV
+          </button>
+          <button className="btn primary" onClick={() => onExportPDF(selectedScenes)} disabled={!pickedCount}>
+            <Icon name="file" size={13}/>PDF · {pickedCount} scene{pickedCount!==1?"s":""}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Print / PDF Modal ──────────────────────────────────────
 function PrintModal({ scenes, isFilm, perPage, onSetPerPage, computePrintPages, onClose, onPrint }) {
   const { pages, perPage: resolvedPerPage } = computePrintPages(scenes, perPage);
@@ -833,4 +958,4 @@ function PrintModal({ scenes, isFilm, perPage, onSetPerPage, computePrintPages, 
   );
 }
 
-Object.assign(window, { SceneDetail, ImportModal, ShareModal, PrintModal });
+Object.assign(window, { SceneDetail, ImportModal, ShareModal, PrintModal, ExportModal });
