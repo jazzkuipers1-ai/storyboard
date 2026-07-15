@@ -33,6 +33,7 @@
     gap: 16px;
   }
   .proj-card {
+    position: relative;
     background: var(--bg-elev);
     border: 1px solid var(--line);
     border-radius: var(--radius);
@@ -41,11 +42,27 @@
     transition: transform .15s, box-shadow .15s, border-color .15s;
   }
   .proj-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--ink-4); }
+  .proj-card.is-archived { opacity: .55; }
+  .proj-card.is-archived:hover { opacity: .85; }
   .proj-card .cover {
     height: 110px;
     display: flex; align-items: center; justify-content: center;
     font-family: var(--serif); font-style: italic; font-size: 30px; color: white;
+    position: relative;
   }
+  .proj-card .kebab-wrap { position: absolute; top: 8px; right: 8px; z-index: 5; }
+  .proj-card .card-menu-btn { background: rgba(0,0,0,.28); color: #fff; }
+  .proj-card .card-menu-btn:hover { background: rgba(0,0,0,.45); color: #fff; }
+  .archived-toggle {
+    display: flex; align-items: center; gap: 6px;
+    margin: 34px 0 14px; font-size: 12.5px; color: var(--ink-3);
+    background: none; border: 0; cursor: pointer; padding: 0;
+  }
+  .archived-toggle:hover { color: var(--ink-2); }
+  .archived-toggle .chev { transition: transform .15s; }
+  .archived-toggle.open .chev { transform: rotate(90deg); }
+  .archived-section { display: none; }
+  .archived-section.open { display: block; }
   .proj-card .body { padding: 12px 14px 14px; }
   .proj-card .name { font-size: 14.5px; font-weight: 600; margin-bottom: 3px; }
   .proj-card .meta { font-size: 11.5px; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
@@ -96,6 +113,14 @@
       </div>
     </div>
     <div class="proj-grid" id="projGrid"></div>
+
+    <button class="archived-toggle" id="archivedToggle" style="display:none">
+      <span class="chev">›</span>
+      <span id="archivedToggleLabel">Archived</span>
+    </button>
+    <div class="archived-section" id="archivedSection">
+      <div class="proj-grid" id="archivedGrid"></div>
+    </div>
   </div>
 
   <div class="modal-bg" id="newModalBg" style="display:none">
@@ -138,36 +163,118 @@
 
     function loadProjects() {
       const stored = JSON.parse(localStorage.getItem('sb_projects') || '[]');
-      return [...SEED, ...stored];
+      const seedOverrides = JSON.parse(localStorage.getItem('sb_seed_overrides') || '{}');
+      const seeds = SEED.map(s => ({ ...s, archived: !!(seedOverrides[s.id] && seedOverrides[s.id].archived) }));
+      return [...seeds, ...stored];
     }
     function saveProjects(list) {
       const custom = list.filter(p => !p.seeded);
       localStorage.setItem('sb_projects', JSON.stringify(custom));
+      const seedOverrides = {};
+      list.filter(p => p.seeded).forEach(p => { seedOverrides[p.id] = { archived: !!p.archived }; });
+      localStorage.setItem('sb_seed_overrides', JSON.stringify(seedOverrides));
+    }
+
+    function archiveProject(id, archived) {
+      const projects = loadProjects();
+      const p = projects.find(p => p.id === id);
+      if (p) p.archived = archived;
+      saveProjects(projects);
+      render();
+    }
+    function deleteProject(id) {
+      if (!confirm('Delete this project? This cannot be undone.')) return;
+      const projects = loadProjects().filter(p => p.id !== id);
+      saveProjects(projects);
+      render();
+    }
+
+    let openMenuEl = null;
+    function closeMenus() {
+      if (openMenuEl) openMenuEl.style.display = 'none';
+      openMenuEl = null;
+    }
+    document.addEventListener('click', closeMenus);
+
+    function projCard(p) {
+      const card = document.createElement('div');
+      card.className = 'proj-card' + (p.archived ? ' is-archived' : '');
+      card.innerHTML = `
+        <div class="cover" style="background:${p.color}">
+          ${p.name[0].toUpperCase()}
+          <div class="kebab-wrap">
+            <button class="card-menu-btn" title="More">⋯</button>
+            <div class="card-menu" style="display:none"></div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="name">${p.name}</div>
+          <div class="meta"><span class="badge">${p.badge || (p.type === 'film' ? 'Film' : 'Series')}</span></div>
+        </div>`;
+      card.onclick = () => {
+        window.location.href = p.entry || 'index.html?project=' + encodeURIComponent(p.id);
+      };
+      const menuBtn = card.querySelector('.card-menu-btn');
+      const menu = card.querySelector('.card-menu');
+      const items = [];
+      if (p.archived) {
+        items.push(['Restore project', () => archiveProject(p.id, false), false]);
+      } else {
+        items.push(['Archive project', () => archiveProject(p.id, true), false]);
+      }
+      if (!p.seeded) {
+        items.push([p.archived ? 'Delete permanently' : 'Delete project', () => deleteProject(p.id), true]);
+      }
+      menu.innerHTML = items.map(([label, , danger], i) =>
+        `<button data-i="${i}"${danger ? ' class="danger"' : ''}>${label}</button>`
+      ).join('');
+      Array.from(menu.querySelectorAll('button')).forEach((btn, i) => {
+        btn.onclick = (e) => { e.stopPropagation(); closeMenus(); items[i][1](); };
+      });
+      menuBtn.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = openMenuEl === menu;
+        closeMenus();
+        if (!isOpen) {
+          menu.style.display = 'flex';
+          openMenuEl = menu;
+        }
+      };
+      menu.onclick = (e) => e.stopPropagation();
+      return card;
     }
 
     function render() {
-      const grid = document.getElementById('projGrid');
       const projects = loadProjects();
+      const active = projects.filter(p => !p.archived);
+      const archived = projects.filter(p => p.archived);
+
+      const grid = document.getElementById('projGrid');
       grid.innerHTML = '';
-      projects.forEach(p => {
-        const card = document.createElement('div');
-        card.className = 'proj-card';
-        card.innerHTML = `
-          <div class="cover" style="background:${p.color}">${p.name[0].toUpperCase()}</div>
-          <div class="body">
-            <div class="name">${p.name}</div>
-            <div class="meta"><span class="badge">${p.badge || (p.type === 'film' ? 'Film' : 'Series')}</span></div>
-          </div>`;
-        card.onclick = () => {
-          window.location.href = p.entry || 'index.html?project=' + encodeURIComponent(p.id);
-        };
-        grid.appendChild(card);
-      });
+      active.forEach(p => grid.appendChild(projCard(p)));
       const newCard = document.createElement('div');
       newCard.className = 'new-card';
       newCard.innerHTML = `<span class="plus-circ">+</span><span style="font-size:13px;font-weight:500">New project</span>`;
       newCard.onclick = openModal;
       grid.appendChild(newCard);
+
+      const toggle = document.getElementById('archivedToggle');
+      const section = document.getElementById('archivedSection');
+      const archivedGrid = document.getElementById('archivedGrid');
+      archivedGrid.innerHTML = '';
+      archived.forEach(p => archivedGrid.appendChild(projCard(p)));
+      if (archived.length) {
+        toggle.style.display = 'flex';
+        document.getElementById('archivedToggleLabel').textContent = `Archived (${archived.length})`;
+        toggle.onclick = () => {
+          toggle.classList.toggle('open');
+          section.classList.toggle('open');
+        };
+      } else {
+        toggle.style.display = 'none';
+        section.classList.remove('open');
+        toggle.classList.remove('open');
+      }
     }
 
     const PALETTE = ['#9C6A3F', '#3C6EB4', '#2A6F3C', '#7A5AE0', '#C04848', '#1B1B1B'];
