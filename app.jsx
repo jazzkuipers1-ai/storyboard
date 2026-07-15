@@ -31,6 +31,7 @@ function App() {
   const [showPrint, setShowPrint] = useState(false);
   const [printPerPage, setPrintPerPage] = useState("smart"); // smart | 4 | 6 | 9
   const [toast, setToast] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   const isFilm = t.productionType === "film";
 
@@ -218,7 +219,7 @@ function App() {
   // ── Sidebar ────────────────────────────────────────────
   function Sidebar() {
     return (
-      <aside className="sidebar">
+      <aside className="sidebar" onClick={() => setNavOpen(false)}>
         <div className="side-section">
           <SideItem active={filter.kind === "all"} onClick={() => setFilter({ kind: "all" })}
                     count={scenes.length}>
@@ -703,8 +704,11 @@ function App() {
 
   // ── Render ─────────────────────────────────────────────
   return (
-    <div className="app">
+    <div className={"app" + (navOpen ? " nav-open" : "")}>
       <header className="topbar">
+        <button className="hamburger-btn" title="Menu" onClick={() => setNavOpen(v => !v)}>
+          <Icon name={navOpen ? "close" : "menu"} size={16}/>
+        </button>
         <div className="brand">
           <a href="dashboard.html" className="logo" style={{textDecoration:"none"}} title="All projects">C</a>
           <div>
@@ -769,6 +773,7 @@ function App() {
       </header>
 
       <Sidebar/>
+      <div className="nav-backdrop" onClick={() => setNavOpen(false)}/>
 
       <main className="main">
         <PageHead/>
@@ -788,6 +793,7 @@ function App() {
           onCreateGroup={name => createGroup(name)}
           onDuplicate={() => { duplicateScene(openScene.id); setOpenScene(null); }}
           onDelete={() => { deleteScene(openScene.id); }}
+          onToast={setToast}
         />
       )}
       {showImport && (

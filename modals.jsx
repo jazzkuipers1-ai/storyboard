@@ -3,7 +3,9 @@
 const { useState, useEffect, useRef, useMemo } = React;
 
 // ── Scene Detail Modal ─────────────────────────────────────
-function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddComment, onCreateGroup, onDuplicate, onDelete }) {
+const MAX_PHOTOS = 3;
+
+function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddComment, onCreateGroup, onDuplicate, onDelete, onToast }) {
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
   const [activePhoto, setActivePhoto] = useState(0);
   const [notes, setNotes] = useState(scene.notes);
@@ -43,14 +45,21 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
   }
 
   async function handleFiles(fileList) {
-    const files = [...fileList].filter(f => f.type.startsWith("image/"));
-    if (!files.length) return;
+    const all = [...fileList].filter(f => f.type.startsWith("image/"));
+    if (!all.length) return;
+    const room = Math.max(0, MAX_PHOTOS - uploadedPhotos.length);
+    const files = all.slice(0, room);
+    if (!files.length) {
+      onToast?.(`Maximum ${MAX_PHOTOS} photos per card`);
+      return;
+    }
     setUploading(true);
     try {
       const resized = await Promise.all(files.map(f => resizeImage(f)));
       const next = [...uploadedPhotos, ...resized];
       onUpdate({ photos: next });
       setActivePhoto(next.length - resized.length);
+      if (all.length > files.length) onToast?.(`Only added ${files.length} — maximum ${MAX_PHOTOS} photos per card`);
     } finally {
       setUploading(false);
     }
@@ -114,9 +123,11 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                   )}
                 </div>
               ))}
-              <button className="add" title="Add photo" onClick={() => fileInputRef.current?.click()}>
-                <Icon name="plus" size={14}/>
-              </button>
+              {uploadedPhotos.length < MAX_PHOTOS && (
+                <button className="add" title="Add photo" onClick={() => fileInputRef.current?.click()}>
+                  <Icon name="plus" size={14}/>
+                </button>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"

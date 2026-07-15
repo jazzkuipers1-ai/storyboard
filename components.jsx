@@ -20,6 +20,7 @@ function Icon({ name, size=16 }) {
     upload: <><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 18v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></>,
     share:  <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.5" y1="10.5" x2="15.5" y2="6.5"/><line x1="8.5" y1="13.5" x2="15.5" y2="17.5"/></>,
     close:  <><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></>,
+    menu:   <><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></>,
     chevR:  <polyline points="9,6 15,12 9,18"/>,
     pin:    <><path d="M12 22s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></>,
     comment:<><path d="M21 12a8.5 8.5 0 1 1-3.6-6.95L21 4l-1 4a8.4 8.4 0 0 1 1 4z"/></>,
