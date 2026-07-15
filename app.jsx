@@ -11,6 +11,13 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const project = window.STORY.PROJECT; // set by index.html's boot script for ?project= loads
+
+  // A freshly created project may start in Film mode — apply that once, without
+  // touching the static TWEAK_DEFAULTS block the design-mode host rewrites on disk.
+  useEffect(() => {
+    if (project?.type) setTweak("productionType", project.type);
+  }, []);
 
   // ── App data state ─────────────────────────────────────
   const [scenes, setScenes] = useState(window.STORY.SCENES);
@@ -308,16 +315,18 @@ function App() {
 
   // ── Page head (title + stats) ──────────────────────────
   function PageHead() {
+    const epCount = window.STORY.EPISODES.length;
+    const countryCount = new Set(window.STORY.EPISODES.map(e => e.country)).size;
     let title = "All scenes";
-    let sub = isFilm ? "Across 4 countries" : "Across 4 episodes and 4 countries";
+    let sub = isFilm ? `Across ${countryCount} countries` : `Across ${epCount} episodes and ${countryCount} countries`;
     if (filter.kind === "episode" && !isFilm) {
       const ep = window.STORY.EPISODES.find(e => e.id === filter.value);
       title = `EP ${ep?.n} · ${ep?.title}`;
-      sub = `${ep?.country} · ${ep?.era}`;
+      sub = [ep?.country, ep?.era].filter(Boolean).join(" · ");
     } else if (filter.kind === "country") {
       title = filter.value;
       const ep = window.STORY.EPISODES.find(e => e.country === filter.value);
-      sub = `${counts.byCountry[filter.value] || 0} scenes${ep ? ` · ${ep.era}` : ""}`;
+      sub = `${counts.byCountry[filter.value] || 0} scenes${ep?.era ? ` · ${ep.era}` : ""}`;
     } else if (filter.kind === "status") {
       title = STATUS[filter.value]?.label;
       sub = `${counts.byStatus[filter.value] || 0} scenes`;
@@ -330,8 +339,8 @@ function App() {
       <div className="page-head">
         <div>
           <div className="crumbs">
-            <span>The Camino</span><span className="sep">/</span>
-            {!isFilm && <><span>Season 1</span><span className="sep">/</span></>}
+            <span>{project?.name || "The Camino"}</span><span className="sep">/</span>
+            {!isFilm && !project && <><span>Season 1</span><span className="sep">/</span></>}
             <span style={{color:"var(--ink-2)"}}>{view === "grid" ? "Scenes" : view === "groups" ? "Groups" : "Map"}</span>
           </div>
           <h1>{title}</h1>
@@ -710,10 +719,12 @@ function App() {
           <Icon name={navOpen ? "close" : "menu"} size={16}/>
         </button>
         <div className="brand">
-          <a href="dashboard.html" className="logo" style={{textDecoration:"none"}} title="All projects">C</a>
+          <a href="dashboard.html" className="logo" style={{textDecoration:"none"}} title="All projects">
+            {(project?.name || "The Camino")[0].toUpperCase()}
+          </a>
           <div>
-            <div className="title">The Camino</div>
-            <div className="sub">{isFilm ? "Feature film" : "Season 1 · 4 episodes"}</div>
+            <div className="title">{project?.name || "The Camino"}</div>
+            <div className="sub">{isFilm ? "Feature film" : project ? "Series" : "Season 1 · 4 episodes"}</div>
           </div>
         </div>
 

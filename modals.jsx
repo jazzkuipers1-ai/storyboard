@@ -585,7 +585,7 @@ function ShareModal({ scope, scenes = [], onClose, onToast }) {
             <div>
               <div style={{fontSize:13,fontWeight:600}}>{isGroup ? `Share group` : "Share storyboard"}</div>
               <div style={{fontSize:11.5,color:"var(--ink-3)"}}>
-                {isGroup ? `${scope.name} · ${scope.count} scene${scope.count>1?"s":""}` : "The Camino · Season 1"}
+                {isGroup ? `${scope.name} · ${scope.count} scene${scope.count>1?"s":""}` : (window.STORY.PROJECT?.name || "The Camino · Season 1")}
               </div>
             </div>
           </div>

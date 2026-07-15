@@ -15,6 +15,8 @@
 <meta name="apple-mobile-web-app-title" content="Storyboard" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" type="image/png" />
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="parser.js"></script>
 <style>
   body { background: var(--bg); }
   .dash-top {
@@ -101,6 +103,17 @@
     font-size: 13px; font-weight: 500; color: var(--ink-2); cursor: pointer;
   }
   .type-pick button.active { background: var(--ink); color: var(--bg-elev); border-color: var(--ink); }
+  .np-dropzone { padding: 22px 16px; cursor: pointer; }
+  .np-dropzone h3 { font-size: 15px; }
+  .np-dropzone p { font-size: 11.5px; }
+  .np-parsed {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-radius: 8px;
+    background: var(--bg-sunk); border: 1px solid var(--line);
+    font-size: 12.5px;
+  }
+  .np-parsed .x { margin-left: auto; }
+  .np-error { color: var(--danger); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -147,6 +160,20 @@
             <button type="button" class="active" data-type="series">Series</button>
             <button type="button" data-type="film">Film</button>
           </div>
+        </div>
+        <div class="np-field">
+          <label>Chrono Script Order (optional)</label>
+          <div class="dropzone np-dropzone" id="npDropzone">
+            <input type="file" id="npFileInput" accept="application/pdf" style="display:none" />
+            <div id="npDropzoneIdle">
+              <div class="icon" style="width:32px;height:32px;margin-bottom:6px"><span style="font-size:15px">↑</span></div>
+              <h3>Drop a schedule PDF</h3>
+              <p>Start the project already populated with its scenes — or skip this and import later.</p>
+            </div>
+            <div id="npParsing" style="display:none;font-size:12.5px;color:var(--ink-3)">Parsing schedule…</div>
+          </div>
+          <div id="npParsedSummary" class="np-parsed" style="display:none;margin-top:8px"></div>
+          <div id="npError" class="np-error" style="display:none;margin-top:6px"></div>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--line)">
@@ -285,10 +312,116 @@
     }
 
     const PALETTE = ['#9C6A3F', '#3C6EB4', '#2A6F3C', '#7A5AE0', '#C04848', '#1B1B1B'];
+    const EP_TITLES = { ep1: 'France', ep2: 'Yugoslavia', ep3: 'The Netherlands', ep4: 'Germany' };
+    const EP_COLORS = { ep1: '#3C6EB4', ep2: '#D52B1E', ep3: '#21468B', ep4: '#1B1B1B' };
+
+    function buildSceneObjects(parsed) {
+      return parsed.map((p, i) => ({
+        id: `s${i + 1}`,
+        scene: p.scene,
+        episode: p.episode,
+        intExt: p.intExt,
+        dn: p.dn,
+        slug: p.slug,
+        address: p.address,
+        status: 'todo',
+        group: null,
+        photoHint: p.photoHint,
+        photos: [],
+        photoThumbs: [],
+        notes: p.notes || '',
+        comments: [],
+        shootDay: null,
+        shootIndex: i,
+      }));
+    }
+    function buildEpisodesFromScenes(scenes) {
+      const ids = [...new Set(scenes.map(s => s.episode))];
+      return ids.map((id, i) => ({
+        id, n: 100 + i + 1,
+        title: EP_TITLES[id] || id,
+        country: (scenes.find(s => s.episode === id) || {}).country || EP_TITLES[id] || id,
+        era: '',
+        color: EP_COLORS[id] || PALETTE[i % PALETTE.length],
+      }));
+    }
+    function buildSuggestions(scenes) {
+      const slugRoot = s => (s || '').split('—')[0].trim();
+      const buckets = {};
+      scenes.forEach(s => {
+        if (s.group) return;
+        const k = slugRoot(s.slug);
+        if (!k) return;
+        (buckets[k] = buckets[k] || []).push(s.id);
+      });
+      return Object.entries(buckets)
+        .filter(([, ids]) => ids.length >= 2)
+        .slice(0, 5)
+        .map(([name, ids], i) => ({
+          id: `sug${i + 1}`, name,
+          reason: `${ids.length} scenes share "${name}"`,
+          sceneIds: ids,
+          confidence: 0.75 + i * 0.03,
+        }));
+    }
+
+    let pendingImport = null; // { scenes, filename } once a PDF has been parsed
+
+    function resetImportUI() {
+      pendingImport = null;
+      document.getElementById('npDropzoneIdle').style.display = 'block';
+      document.getElementById('npParsing').style.display = 'none';
+      document.getElementById('npParsedSummary').style.display = 'none';
+      document.getElementById('npError').style.display = 'none';
+      document.getElementById('npFileInput').value = '';
+    }
+
+    async function parseImportFile(file) {
+      document.getElementById('npDropzoneIdle').style.display = 'none';
+      document.getElementById('npError').style.display = 'none';
+      document.getElementById('npParsedSummary').style.display = 'none';
+      document.getElementById('npParsing').style.display = 'block';
+      try {
+        const scenes = await window.parseChronoPdf(file);
+        document.getElementById('npParsing').style.display = 'none';
+        if (!scenes.length) {
+          document.getElementById('npDropzoneIdle').style.display = 'block';
+          document.getElementById('npError').textContent = `No scenes recognized in "${file.name}".`;
+          document.getElementById('npError').style.display = 'block';
+          return;
+        }
+        pendingImport = { scenes, filename: file.name };
+        const summary = document.getElementById('npParsedSummary');
+        summary.innerHTML = `<span>📄 <b>${scenes.length} scenes</b> found in ${file.name}</span><button type="button" class="modal-x x" title="Remove">✕</button>`;
+        summary.style.display = 'flex';
+        summary.querySelector('.x').onclick = (e) => { e.stopPropagation(); resetImportUI(); };
+      } catch (err) {
+        console.error(err);
+        document.getElementById('npParsing').style.display = 'none';
+        document.getElementById('npDropzoneIdle').style.display = 'block';
+        document.getElementById('npError').textContent = `Couldn't read "${file.name}": ${err.message || err}`;
+        document.getElementById('npError').style.display = 'block';
+      }
+    }
+
+    const npDropzone = document.getElementById('npDropzone');
+    const npFileInput = document.getElementById('npFileInput');
+    npDropzone.onclick = () => { if (!pendingImport) npFileInput.click(); };
+    npDropzone.ondragover = (e) => { e.preventDefault(); npDropzone.classList.add('over'); };
+    npDropzone.ondragleave = () => npDropzone.classList.remove('over');
+    npDropzone.ondrop = (e) => {
+      e.preventDefault();
+      npDropzone.classList.remove('over');
+      const f = e.dataTransfer.files[0];
+      if (f) parseImportFile(f);
+    };
+    npFileInput.onchange = (e) => { const f = e.target.files[0]; if (f) parseImportFile(f); };
+
     function openModal() {
       document.getElementById('newModalBg').style.display = 'flex';
       document.getElementById('npName').value = '';
       document.getElementById('npName').focus();
+      resetImportUI();
     }
     function closeModal() { document.getElementById('newModalBg').style.display = 'none'; }
     document.getElementById('newModalBg').onclick = closeModal;
@@ -304,12 +437,28 @@
       };
     });
 
+    function saveProjectData(id, bundle) {
+      const store = JSON.parse(localStorage.getItem('sb_project_data') || '{}');
+      store[id] = bundle;
+      localStorage.setItem('sb_project_data', JSON.stringify(store));
+    }
+
     document.getElementById('createNew').onclick = () => {
       const name = document.getElementById('npName').value.trim();
       if (!name) return;
       const projects = loadProjects();
       const color = PALETTE[projects.length % PALETTE.length];
-      const proj = { id: 'p' + Date.now(), name, type: selType, color, entry: 'index.html' };
+      const id = 'p' + Date.now();
+
+      const scenes = pendingImport ? buildSceneObjects(pendingImport.scenes) : [];
+      saveProjectData(id, {
+        name, type: selType,
+        scenes,
+        episodes: buildEpisodesFromScenes(scenes),
+        suggestions: buildSuggestions(scenes),
+      });
+
+      const proj = { id, name, type: selType, color, entry: `index.html?project=${encodeURIComponent(id)}` };
       projects.push(proj);
       saveProjects(projects);
       closeModal();
