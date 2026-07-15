@@ -25,6 +25,14 @@
 <body>
 <script>
   (async function () {
+    // This shell only ever renders a specific project — with no ?project= id
+    // there's nothing to show, so send people to the dashboard (which itself
+    // redirects to login.html if they're not signed in) instead of falling
+    // through to stale hardcoded demo data.
+    if (!new URLSearchParams(location.search).get('project')) {
+      window.location.href = 'dashboard.html';
+      return;
+    }
     const session = await window.SB_AUTH.syncAuthFlag();
     if (!session) window.location.href = 'login.html';
   })();

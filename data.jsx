@@ -192,18 +192,26 @@ window.STORY = { EPISODES, SCENES, SUGGESTIONS, TEAM, PH, FLAG_FR, FLAG_YU, FLAG
 // window.STORY_READY before calling ReactDOM.render, so this can be async.
 window.STORY_READY = (async function () {
   const projectId = new URLSearchParams(location.search).get("project");
-  if (!projectId) return;
+  if (!projectId) { window.location.href = "dashboard.html"; return new Promise(() => {}); }
   try {
     const [project, projectData] = await Promise.all([
       window.SB_DATA.getProject(projectId),
       window.SB_DATA.getProjectData(projectId),
     ]);
-    if (!project) return; // not found, or not owned by the signed-in user (RLS)
+    if (!project) {
+      // Not found, or not owned/shared with the signed-in user (RLS) — there's
+      // nothing valid to render, so bounce to the dashboard instead of
+      // silently falling through to the stale hardcoded demo data above.
+      window.location.href = "dashboard.html";
+      return new Promise(() => {}); // never resolves — a redirect is already underway
+    }
     window.STORY.SCENES = projectData?.scenes || [];
     window.STORY.EPISODES = projectData?.episodes || [];
     window.STORY.SUGGESTIONS = projectData?.suggestions || [];
     window.STORY.PROJECT = { id: projectId, name: project.name, type: project.type };
   } catch (err) {
     console.error("Failed to load project data", err);
+    window.location.href = "dashboard.html";
+    return new Promise(() => {});
   }
 })();
