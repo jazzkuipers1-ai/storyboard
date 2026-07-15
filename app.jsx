@@ -943,4 +943,6 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+(window.STORY_READY || Promise.resolve()).then(() => {
+  ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+});

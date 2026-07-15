@@ -186,22 +186,23 @@ SHOOT_ORDER.forEach(([ep, num, day], i) => {
 
 window.STORY = { EPISODES, SCENES, SUGGESTIONS, TEAM, PH, FLAG_FR, FLAG_YU, FLAG_NL, FLAG_DE };
 
-// Project-scoped boot: swap the seed ("The Camino") data for whatever was
-// stored at project-creation time (see dashboard.html), before the app mounts.
-// Runs as part of this same babel-processed file so it's guaranteed to execute
-// after window.STORY above — a separate plain <script> tag between data.jsx and
-// components.jsx raced ahead of data.jsx's own (async-loaded) babel transform.
-(function () {
+// Project-scoped boot: swap the seed ("The Camino") data for the signed-in
+// user's own project (fetched from Supabase, RLS-scoped to their account —
+// see supabase.js SB_DATA), before the app mounts. app.jsx awaits
+// window.STORY_READY before calling ReactDOM.render, so this can be async.
+window.STORY_READY = (async function () {
   const projectId = new URLSearchParams(location.search).get("project");
   if (!projectId) return;
   try {
-    const store = JSON.parse(localStorage.getItem("sb_project_data") || "{}");
-    const proj = store[projectId];
-    if (!proj) return;
-    window.STORY.SCENES = proj.scenes || [];
-    window.STORY.EPISODES = proj.episodes || [];
-    window.STORY.SUGGESTIONS = proj.suggestions || [];
-    window.STORY.PROJECT = { id: projectId, name: proj.name, type: proj.type };
+    const [project, projectData] = await Promise.all([
+      window.SB_DATA.getProject(projectId),
+      window.SB_DATA.getProjectData(projectId),
+    ]);
+    if (!project) return; // not found, or not owned by the signed-in user (RLS)
+    window.STORY.SCENES = projectData?.scenes || [];
+    window.STORY.EPISODES = projectData?.episodes || [];
+    window.STORY.SUGGESTIONS = projectData?.suggestions || [];
+    window.STORY.PROJECT = { id: projectId, name: project.name, type: project.type };
   } catch (err) {
     console.error("Failed to load project data", err);
   }

@@ -190,6 +190,7 @@
       const session = await window.SB_AUTH.syncAuthFlag();
       if (!session) { window.location.href = 'login.html'; return; }
       document.getElementById('whoami').textContent = session.user.email || '';
+      render();
     })();
     document.getElementById('signOutBtn').onclick = async () => {
       await window.SB_AUTH.signOut();
@@ -198,35 +199,38 @@
       window.location.href = 'login.html';
     };
 
+    // The seed demo ("The Camino") is static content shown to every account —
+    // only its archived state is per-browser (low-stakes UI preference, not
+    // real project data, so localStorage is fine here). Real projects with
+    // actual scene/location data live in Supabase, scoped per-user via RLS.
     const SEED = [
       { id: 'camino', name: 'The Camino', type: 'series', color: '#9C6A3F', badge: 'S1 · 4 EP', seeded: true, entry: 'index.html' },
     ];
 
-    function loadProjects() {
-      const stored = JSON.parse(localStorage.getItem('sb_projects') || '[]');
+    async function loadProjects() {
       const seedOverrides = JSON.parse(localStorage.getItem('sb_seed_overrides') || '{}');
       const seeds = SEED.map(s => ({ ...s, archived: !!(seedOverrides[s.id] && seedOverrides[s.id].archived) }));
-      return [...seeds, ...stored];
-    }
-    function saveProjects(list) {
-      const custom = list.filter(p => !p.seeded);
-      localStorage.setItem('sb_projects', JSON.stringify(custom));
-      const seedOverrides = {};
-      list.filter(p => p.seeded).forEach(p => { seedOverrides[p.id] = { archived: !!p.archived }; });
-      localStorage.setItem('sb_seed_overrides', JSON.stringify(seedOverrides));
+      const rows = await window.SB_DATA.listProjects();
+      const custom = rows.map(r => ({
+        id: r.id, name: r.name, type: r.type, color: r.color, archived: r.archived,
+        entry: `./?project=${encodeURIComponent(r.id)}`,
+      }));
+      return [...seeds, ...custom];
     }
 
-    function archiveProject(id, archived) {
-      const projects = loadProjects();
-      const p = projects.find(p => p.id === id);
-      if (p) p.archived = archived;
-      saveProjects(projects);
+    async function archiveProject(id, archived) {
+      if (id === 'camino') {
+        const seedOverrides = JSON.parse(localStorage.getItem('sb_seed_overrides') || '{}');
+        seedOverrides[id] = { archived };
+        localStorage.setItem('sb_seed_overrides', JSON.stringify(seedOverrides));
+      } else {
+        await window.SB_DATA.updateProject(id, { archived });
+      }
       render();
     }
-    function deleteProject(id) {
+    async function deleteProject(id) {
       if (!confirm('Delete this project? This cannot be undone.')) return;
-      const projects = loadProjects().filter(p => p.id !== id);
-      saveProjects(projects);
+      await window.SB_DATA.deleteProject(id);
       render();
     }
 
@@ -253,7 +257,7 @@
           <div class="meta"><span class="badge">${p.badge || (p.type === 'film' ? 'Film' : 'Series')}</span></div>
         </div>`;
       card.onclick = () => {
-        window.location.href = p.entry || 'index.html?project=' + encodeURIComponent(p.id);
+        window.location.href = p.entry || './?project=' + encodeURIComponent(p.id);
       };
       const menuBtn = card.querySelector('.card-menu-btn');
       const menu = card.querySelector('.card-menu');
@@ -285,8 +289,8 @@
       return card;
     }
 
-    function render() {
-      const projects = loadProjects();
+    async function render() {
+      const projects = await loadProjects();
       const active = projects.filter(p => !p.archived);
       const archived = projects.filter(p => p.archived);
 
@@ -444,35 +448,36 @@
       };
     });
 
-    function saveProjectData(id, bundle) {
-      const store = JSON.parse(localStorage.getItem('sb_project_data') || '{}');
-      store[id] = bundle;
-      localStorage.setItem('sb_project_data', JSON.stringify(store));
-    }
-
-    document.getElementById('createNew').onclick = () => {
+    document.getElementById('createNew').onclick = async () => {
       const name = document.getElementById('npName').value.trim();
       if (!name) return;
-      const projects = loadProjects();
-      const color = PALETTE[projects.length % PALETTE.length];
-      const id = 'p' + Date.now();
+      const btn = document.getElementById('createNew');
+      btn.disabled = true;
+      btn.textContent = 'Creating…';
+      try {
+        const projects = await loadProjects();
+        const color = PALETTE[projects.length % PALETTE.length];
+        const id = crypto.randomUUID();
 
-      const scenes = pendingImport ? buildSceneObjects(pendingImport.scenes) : [];
-      saveProjectData(id, {
-        name, type: selType,
-        scenes,
-        episodes: buildEpisodesFromScenes(scenes),
-        suggestions: buildSuggestions(scenes),
-      });
+        await window.SB_DATA.createProject({ id, name, type: selType, color, archived: false });
 
-      const proj = { id, name, type: selType, color, entry: `index.html?project=${encodeURIComponent(id)}` };
-      projects.push(proj);
-      saveProjects(projects);
-      closeModal();
-      render();
+        const scenes = pendingImport ? buildSceneObjects(pendingImport.scenes) : [];
+        await window.SB_DATA.saveProjectData(id, {
+          scenes,
+          episodes: buildEpisodesFromScenes(scenes),
+          suggestions: buildSuggestions(scenes),
+        });
+
+        closeModal();
+        render();
+      } catch (err) {
+        console.error(err);
+        alert("Couldn't create project: " + (err.message || err));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create project';
+      }
     };
-
-    render();
   </script>
 </body>
 </html>
