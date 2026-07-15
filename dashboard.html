@@ -17,6 +17,8 @@
 <link rel="icon" href="icons/icon-192.png" type="image/png" />
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="parser.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
 <style>
   body { background: var(--bg); }
   .dash-top {
@@ -184,10 +186,15 @@
   </div>
 
   <script>
-    if (!sessionStorage.getItem('sb_auth')) window.location.href = 'login.html';
-    document.getElementById('whoami').textContent = 'mira@camino-productions.com';
-    document.getElementById('signOutBtn').onclick = () => {
+    (async function () {
+      const session = await window.SB_AUTH.syncAuthFlag();
+      if (!session) { window.location.href = 'login.html'; return; }
+      document.getElementById('whoami').textContent = session.user.email || '';
+    })();
+    document.getElementById('signOutBtn').onclick = async () => {
+      await window.SB_AUTH.signOut();
       sessionStorage.removeItem('sb_auth');
+      sessionStorage.removeItem('sb_user_email');
       window.location.href = 'login.html';
     };
 

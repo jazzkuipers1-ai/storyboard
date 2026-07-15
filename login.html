@@ -15,6 +15,8 @@
 <meta name="apple-mobile-web-app-title" content="Storyboard" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" type="image/png" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
 <style>
   body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg-sunk); padding: 16px; box-sizing: border-box; }
   .login-card {
@@ -37,7 +39,13 @@
     margin-bottom: 16px;
   }
   .login-card h1 { font-family: var(--serif); font-weight: 400; font-size: 26px; margin: 0 0 4px; }
-  .login-card p.sub { color: var(--ink-3); font-size: 13px; margin: 0 0 22px; }
+  .login-card p.sub { color: var(--ink-3); font-size: 13px; margin: 0 0 18px; }
+  .login-tabs { display: flex; gap: 4px; background: var(--bg-sunk); border: 1px solid var(--line); border-radius: 8px; padding: 3px; margin-bottom: 20px; }
+  .login-tabs button {
+    flex: 1; appearance: none; border: 0; background: transparent; cursor: pointer;
+    padding: 7px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--ink-2);
+  }
+  .login-tabs button.active { background: var(--bg-elev); color: var(--ink); box-shadow: var(--shadow-sm); }
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 12px; color: var(--ink-2); font-weight: 500; margin-bottom: 6px; }
   .field input {
@@ -54,47 +62,148 @@
     font-size: 13.5px; font-weight: 600; cursor: pointer;
   }
   .login-btn:hover { background: var(--ink-2); }
+  .login-btn:disabled { opacity: .6; cursor: default; }
   .login-err {
     display: none; margin-top: 10px;
     font-size: 12.5px; color: var(--danger);
     background: color-mix(in oklch, var(--danger) 10%, transparent);
     border-radius: 6px; padding: 8px 10px;
   }
-  .login-hint {
-    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line-soft);
-    font-size: 11.5px; color: var(--ink-3);
+  .login-ok {
+    display: none; margin-top: 10px;
+    font-size: 12.5px; color: var(--success);
+    background: color-mix(in oklch, var(--success) 10%, transparent);
+    border-radius: 6px; padding: 8px 10px;
   }
-  .login-hint code { font-family: var(--mono); background: var(--bg-sunk); padding: 1px 5px; border-radius: 4px; }
+  .form-panel { display: none; }
+  .form-panel.active { display: block; }
 </style>
 </head>
 <body>
-  <form class="login-card" id="loginForm">
+  <div class="login-card">
     <div class="login-logo">S</div>
     <h1>Storyboard</h1>
-    <p class="sub">Sign in to access your location boards</p>
-    <div class="field">
-      <label for="email">Email</label>
-      <input type="email" id="email" placeholder="you@production.com" value="mira@camino-productions.com" required />
+    <p class="sub" id="subtext">Sign in to access your location boards</p>
+
+    <div class="login-tabs">
+      <button type="button" class="active" data-tab="signin">Sign in</button>
+      <button type="button" data-tab="signup">Create account</button>
     </div>
-    <div class="field">
-      <label for="password">Password</label>
-      <input type="password" id="password" placeholder="••••••••" required />
-    </div>
-    <button type="submit" class="login-btn">Sign in</button>
-    <div class="login-err" id="err">Incorrect password. Try again.</div>
-    <div class="login-hint">Prototype access — password is <code>camino2026</code></div>
-  </form>
+
+    <form class="form-panel active" id="signinForm">
+      <div class="field">
+        <label for="siEmail">Email</label>
+        <input type="email" id="siEmail" placeholder="you@production.com" required />
+      </div>
+      <div class="field">
+        <label for="siPassword">Password</label>
+        <input type="password" id="siPassword" placeholder="••••••••" required />
+      </div>
+      <button type="submit" class="login-btn" id="siBtn">Sign in</button>
+      <div class="login-err" id="siErr"></div>
+    </form>
+
+    <form class="form-panel" id="signupForm">
+      <div class="field">
+        <label for="suEmail">Email</label>
+        <input type="email" id="suEmail" placeholder="you@production.com" required />
+      </div>
+      <div class="field">
+        <label for="suPassword">Password</label>
+        <input type="password" id="suPassword" placeholder="At least 6 characters" minlength="6" required />
+      </div>
+      <div class="field">
+        <label for="suPassword2">Confirm password</label>
+        <input type="password" id="suPassword2" placeholder="••••••••" minlength="6" required />
+      </div>
+      <button type="submit" class="login-btn" id="suBtn">Create account</button>
+      <div class="login-err" id="suErr"></div>
+      <div class="login-ok" id="suOk"></div>
+    </form>
+  </div>
 
   <script>
-    document.getElementById('loginForm').addEventListener('submit', function (e) {
+    (async function () {
+      const session = await window.SB_AUTH.syncAuthFlag();
+      if (session) window.location.href = 'dashboard.html';
+    })();
+
+    const tabs = document.querySelectorAll('.login-tabs button');
+    const panels = { signin: document.getElementById('signinForm'), signup: document.getElementById('signupForm') };
+    const subtext = document.getElementById('subtext');
+    tabs.forEach(btn => {
+      btn.onclick = () => {
+        tabs.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        Object.values(panels).forEach(p => p.classList.remove('active'));
+        panels[btn.dataset.tab].classList.add('active');
+        subtext.textContent = btn.dataset.tab === 'signin'
+          ? 'Sign in to access your location boards'
+          : 'Create an account to start scouting locations';
+      };
+    });
+
+    document.getElementById('signinForm').addEventListener('submit', async function (e) {
       e.preventDefault();
-      const pw = document.getElementById('password').value;
-      const err = document.getElementById('err');
-      if (pw === 'camino2026') {
+      const email = document.getElementById('siEmail').value.trim();
+      const password = document.getElementById('siPassword').value;
+      const err = document.getElementById('siErr');
+      const btn = document.getElementById('siBtn');
+      err.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      try {
+        const { data, error } = await window.SB_AUTH.signIn(email, password);
+        if (error) {
+          err.textContent = error.message;
+          err.style.display = 'block';
+          return;
+        }
         sessionStorage.setItem('sb_auth', '1');
+        sessionStorage.setItem('sb_user_email', data.user?.email || email);
         window.location.href = 'dashboard.html';
-      } else {
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    });
+
+    document.getElementById('signupForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const email = document.getElementById('suEmail').value.trim();
+      const password = document.getElementById('suPassword').value;
+      const password2 = document.getElementById('suPassword2').value;
+      const err = document.getElementById('suErr');
+      const ok = document.getElementById('suOk');
+      const btn = document.getElementById('suBtn');
+      err.style.display = 'none';
+      ok.style.display = 'none';
+      if (password !== password2) {
+        err.textContent = "Passwords don't match.";
         err.style.display = 'block';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Creating account…';
+      try {
+        const { data, error } = await window.SB_AUTH.signUp(email, password);
+        if (error) {
+          err.textContent = error.message;
+          err.style.display = 'block';
+          return;
+        }
+        if (data.session) {
+          sessionStorage.setItem('sb_auth', '1');
+          sessionStorage.setItem('sb_user_email', data.user?.email || email);
+          window.location.href = 'dashboard.html';
+        } else {
+          ok.textContent = 'Account created — check your email to confirm, then sign in.';
+          ok.style.display = 'block';
+          document.getElementById('signupForm').reset();
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create account';
       }
     });
   </script>
