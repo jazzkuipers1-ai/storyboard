@@ -171,17 +171,24 @@
       .toUpperCase()
       .replace(/\s*\/\s*/g, " / ");
 
-    const metaBits = [];
-    if (raw.pagelen) metaBits.push(`Page length: ${raw.pagelen}`);
-    if (raw.continuity) metaBits.push(`Continuity: ${raw.continuity}`);
-    if (raw.trailing) metaBits.push(`Story day ref: ${raw.trailing}`);
-    const tagText = raw.tags.join(" ").trim();
-    if (tagText) metaBits.push(`Tags: ${tagText}`);
+    // Keep notes to just the synopsis (plus a compact period marker) — the
+    // scene description is what a location scout actually needs to see at a
+    // glance on the card. Screenplay-internal bookkeeping (page length,
+    // continuity numbers, story-day refs, camera/safety tags) is kept, but
+    // folded into a single short trailing line instead of competing for the
+    // same limited card space with blank-line paragraph breaks.
     const eraLine = [raw.eraRaw, raw.year].filter(Boolean).join(" ").trim();
+    const metaBits = [];
+    if (raw.pagelen) metaBits.push(raw.pagelen);
+    if (raw.continuity) metaBits.push(`cont. ${raw.continuity}`);
+    if (raw.trailing) metaBits.push(`day ref ${raw.trailing}`);
+    const tagText = raw.tags.join(" ").trim();
+    if (tagText) metaBits.push(tagText);
 
-    const notes = [raw.synopsis, eraLine ? `Story time: ${eraLine}` : "", metaBits.join(" · ")]
-      .filter(Boolean)
-      .join("\n\n");
+    const notes = [
+      raw.synopsis + (eraLine ? ` (${eraLine})` : ""),
+      metaBits.length ? metaBits.join(" · ") : "",
+    ].filter(Boolean).join("\n");
 
     return {
       tmpId: `chrono-${raw.num}`,
