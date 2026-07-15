@@ -20,7 +20,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Storyboard <onboarding@resend.dev>',
+        from: 'Storyboard <noreply@storyboard.monster>',
         to: [process.env.NOTIFY_EMAIL],
         subject: 'New registration: ' + email,
         text: `Someone just created an account on Storyboard.\n\nEmail: ${email}\nTime: ${createdAt}\n\nYou can manage users at: https://supabase.com/dashboard/project/_/auth/users`,
