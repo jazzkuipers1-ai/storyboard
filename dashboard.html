@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Storyboard — Projects</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  body { background: var(--bg); }
+  .dash-top {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-elev);
+  }
+  .dash-top .logo {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: var(--ink); color: var(--bg-elev);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic; font-size: 16px;
+  }
+  .dash-top .title { font-family: var(--serif); font-style: italic; font-size: 20px; }
+  .dash-wrap { max-width: 1100px; margin: 0 auto; padding: 40px 28px 80px; }
+  .dash-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; }
+  .dash-head h1 { font-family: var(--serif); font-weight: 400; font-size: 34px; margin: 0 0 4px; }
+  .dash-head p { margin: 0; color: var(--ink-3); font-size: 13px; }
+  .proj-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .proj-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .proj-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--ink-4); }
+  .proj-card .cover {
+    height: 110px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic; font-size: 30px; color: white;
+  }
+  .proj-card .body { padding: 12px 14px 14px; }
+  .proj-card .name { font-size: 14.5px; font-weight: 600; margin-bottom: 3px; }
+  .proj-card .meta { font-size: 11.5px; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
+  .proj-card .badge {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .03em;
+    padding: 2px 6px; border-radius: 4px; background: var(--bg-sunk); color: var(--ink-2);
+  }
+  .new-card {
+    border: 1.5px dashed var(--line);
+    border-radius: var(--radius);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; min-height: 168px;
+    color: var(--ink-3); cursor: pointer;
+    background: transparent;
+  }
+  .new-card:hover { background: var(--bg-sunk); color: var(--ink-2); border-color: var(--ink-4); }
+  .new-card .plus-circ {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center;
+  }
+  /* new project modal reuse .modal-bg/.modal from styles.css */
+  .np-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .np-field label { display: block; font-size: 12px; color: var(--ink-2); font-weight: 500; margin-bottom: 6px; }
+  .np-field input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 9px 12px; font-size: 13.5px; outline: none; }
+  .np-field input:focus { border-color: var(--ink-3); }
+  .type-pick { display: flex; gap: 8px; }
+  .type-pick button {
+    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-elev);
+    font-size: 13px; font-weight: 500; color: var(--ink-2); cursor: pointer;
+  }
+  .type-pick button.active { background: var(--ink); color: var(--bg-elev); border-color: var(--ink); }
+</style>
+</head>
+<body>
+  <div class="dash-top">
+    <span class="logo">S</span>
+    <span class="title">Storyboard</span>
+    <div style="flex:1"></div>
+    <span style="font-size:12.5px;color:var(--ink-3)" id="whoami"></span>
+    <button class="btn ghost" id="signOutBtn" style="font-size:12.5px">Sign out</button>
+  </div>
+
+  <div class="dash-wrap">
+    <div class="dash-head">
+      <div>
+        <h1>Your projects</h1>
+        <p>Pick a production to open its storyboard, or start a new one.</p>
+      </div>
+    </div>
+    <div class="proj-grid" id="projGrid"></div>
+  </div>
+
+  <div class="modal-bg" id="newModalBg" style="display:none">
+    <div class="modal narrow" style="flex-direction:column" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div style="font-size:13px;font-weight:600">New project</div>
+        <button class="modal-x" id="closeNewModal">✕</button>
+      </div>
+      <div class="np-body">
+        <div class="np-field">
+          <label>Project name</label>
+          <input id="npName" placeholder="e.g. Northern Lights" />
+        </div>
+        <div class="np-field">
+          <label>Type</label>
+          <div class="type-pick">
+            <button type="button" class="active" data-type="series">Series</button>
+            <button type="button" data-type="film">Film</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--line)">
+        <button class="btn ghost" id="cancelNew">Cancel</button>
+        <button class="btn primary" id="createNew">Create project</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if (!sessionStorage.getItem('sb_auth')) window.location.href = 'login.html';
+    document.getElementById('whoami').textContent = 'mira@camino-productions.com';
+    document.getElementById('signOutBtn').onclick = () => {
+      sessionStorage.removeItem('sb_auth');
+      window.location.href = 'login.html';
+    };
+
+    const SEED = [
+      { id: 'camino', name: 'The Camino', type: 'series', color: '#9C6A3F', badge: 'S1 · 4 EP', seeded: true, entry: 'index.html' },
+    ];
+
+    function loadProjects() {
+      const stored = JSON.parse(localStorage.getItem('sb_projects') || '[]');
+      return [...SEED, ...stored];
+    }
+    function saveProjects(list) {
+      const custom = list.filter(p => !p.seeded);
+      localStorage.setItem('sb_projects', JSON.stringify(custom));
+    }
+
+    function render() {
+      const grid = document.getElementById('projGrid');
+      const projects = loadProjects();
+      grid.innerHTML = '';
+      projects.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'proj-card';
+        card.innerHTML = `
+          <div class="cover" style="background:${p.color}">${p.name[0].toUpperCase()}</div>
+          <div class="body">
+            <div class="name">${p.name}</div>
+            <div class="meta"><span class="badge">${p.badge || (p.type === 'film' ? 'Film' : 'Series')}</span></div>
+          </div>`;
+        card.onclick = () => {
+          window.location.href = p.entry || 'index.html?project=' + encodeURIComponent(p.id);
+        };
+        grid.appendChild(card);
+      });
+      const newCard = document.createElement('div');
+      newCard.className = 'new-card';
+      newCard.innerHTML = `<span class="plus-circ">+</span><span style="font-size:13px;font-weight:500">New project</span>`;
+      newCard.onclick = openModal;
+      grid.appendChild(newCard);
+    }
+
+    const PALETTE = ['#9C6A3F', '#3C6EB4', '#2A6F3C', '#7A5AE0', '#C04848', '#1B1B1B'];
+    function openModal() {
+      document.getElementById('newModalBg').style.display = 'flex';
+      document.getElementById('npName').value = '';
+      document.getElementById('npName').focus();
+    }
+    function closeModal() { document.getElementById('newModalBg').style.display = 'none'; }
+    document.getElementById('newModalBg').onclick = closeModal;
+    document.getElementById('closeNewModal').onclick = closeModal;
+    document.getElementById('cancelNew').onclick = closeModal;
+
+    let selType = 'series';
+    document.querySelectorAll('.type-pick button').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.type-pick button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selType = btn.dataset.type;
+      };
+    });
+
+    document.getElementById('createNew').onclick = () => {
+      const name = document.getElementById('npName').value.trim();
+      if (!name) return;
+      const projects = loadProjects();
+      const color = PALETTE[projects.length % PALETTE.length];
+      const proj = { id: 'p' + Date.now(), name, type: selType, color, entry: 'index.html' };
+      projects.push(proj);
+      saveProjects(projects);
+      closeModal();
+      render();
+    };
+
+    render();
+  </script>
+</body>
+</html>
