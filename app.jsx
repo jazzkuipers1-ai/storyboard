@@ -9,6 +9,28 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "gridCols": 4
 }/*EDITMODE-END*/;
 
+// Bundles scenes that share a location — either a manually assigned group, or
+// (when ungrouped) an identical slug — preserving first-seen order. Singleton
+// entries are still returned so callers can decide whether to show them plain.
+function clusterByLocation(list) {
+  const buckets = {};
+  const order = [];
+  list.forEach(s => {
+    const key = s.group || `slug:${s.slug}`;
+    if (!buckets[key]) { buckets[key] = []; order.push(key); }
+    buckets[key].push(s);
+  });
+  return order.map(key => {
+    const inBucket = buckets[key];
+    return {
+      key,
+      name: inBucket[0].group || inBucket[0].slug,
+      address: inBucket.find(s => s.address)?.address || "",
+      scenes: inBucket,
+    };
+  });
+}
+
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const project = window.STORY.PROJECT; // set by index.html's boot script for ?project= loads
@@ -80,6 +102,8 @@ function App() {
     }
     return [...list].sort((a, b) => (a.shootIndex ?? 999) - (b.shootIndex ?? 999));
   }, [scenes, filter, search]);
+
+  const locationClusters = useMemo(() => clusterByLocation(scenes), [scenes]);
 
   const counts = useMemo(() => {
     const byEp = {}, byCountry = {}, byStatus = {}, byGroup = {};
@@ -428,6 +452,33 @@ function App() {
     setShowPrint(true);
   }
 
+  // One row per bundled location (scenes sharing a group, or an identical slug
+  // when ungrouped) — for a printable/shareable address list, not a per-scene sheet.
+  function exportLocationsCSV() {
+    const header = ["Location", "Address", "Scenes", "Episodes", "Countries"];
+    const rows = locationClusters.map(c => {
+      const eps = [...new Set(c.scenes.map(s => {
+        const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
+        return ep ? `${ep.n}` : "";
+      }).filter(Boolean))];
+      const countries = [...new Set(c.scenes.map(s => {
+        const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
+        return ep?.country || "";
+      }).filter(Boolean))];
+      return [c.name, c.address, c.scenes.length, isFilm ? "" : eps.join(", "), countries.join(", ")];
+    });
+    const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [header, ...rows].map(r => r.map(esc).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "camino-locations.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+    setToast("Locations CSV exported");
+  }
+
   // drag state for manual reorder
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
@@ -450,6 +501,7 @@ function App() {
       onDuplicate: () => duplicateScene(s.id),
       onDelete: () => deleteScene(s.id),
     });
+    const listClusters = useMemo(() => clusterByLocation(filtered), [filtered]);
     return (
       <>
         <div className="filters">
@@ -486,7 +538,25 @@ function App() {
 
         {layout === "list" ? (
           <div className="row-list">
-            {filtered.map(s => <SceneRow {...commonProps(s)}/>)}
+            {listClusters.map(c => c.scenes.length > 1 ? (
+              <div className="row-cluster" key={c.key}>
+                <div className="row-group-header">
+                  <span className="icon">
+                    {(() => { const withPhoto = c.scenes.find(s => s.photos && s.photos.length); return withPhoto
+                      ? <img src={coverPhoto(withPhoto)} alt=""/>
+                      : <Icon name="pin" size={12}/>; })()}
+                  </span>
+                  <span className="name">{c.name}</span>
+                  {c.address && <span className="addr">{c.address}</span>}
+                  <span className="count">{c.scenes.length} scenes</span>
+                </div>
+                {c.scenes.map(s => <SceneRow {...commonProps(s)}/>)}
+              </div>
+            ) : (
+              <div className="row-cluster" key={c.key}>
+                <SceneRow {...commonProps(c.scenes[0])}/>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="grid" style={layout === "large" ? { "--grid-cols": Math.max(1, Math.min(2, t.gridCols)) } : undefined}>
@@ -774,7 +844,8 @@ function App() {
           {exportOpen && (
             <div className="card-menu" style={{top:"calc(100% + 4px)",right:0,left:"auto"}} onMouseLeave={() => setExportOpen(false)}>
               <button onClick={exportPDF}><Icon name="file" size={12}/>Export as PDF</button>
-              <button onClick={exportCSV}><Icon name="copy" size={12}/>Export as CSV</button>
+              <button onClick={exportCSV}><Icon name="copy" size={12}/>Export scenes as CSV</button>
+              <button onClick={exportLocationsCSV}><Icon name="pin" size={12}/>Export locations as CSV</button>
             </div>
           )}
         </div>
