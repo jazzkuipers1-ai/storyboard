@@ -19,8 +19,22 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
   const photos = uploadedPhotos.length ? uploadedPhotos : [scene.photoHint];
   const isUploaded = i => uploadedPhotos.length > 0;
 
-  // Resize client-side so files stay small but print crisp on A4 (~2000px longest edge ≈ 240dpi at full page)
-  function resizeImage(file, maxDim = 2000, quality = 0.85) {
+  // Resize client-side, once per upload, into two sizes:
+  // - "full" (2000px longest edge, q .85) for the detail view / print export
+  // - "thumb" (480px longest edge, q .7) for card/row/mini covers, so boards with
+  //   many scenes don't decode dozens of full-res images just to show a small crop
+  function drawResized(img, maxDim, quality) {
+    let { width, height } = img;
+    if (width > maxDim || height > maxDim) {
+      if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+      else { width = Math.round(width * maxDim / height); height = maxDim; }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width; canvas.height = height;
+    canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", quality);
+  }
+  function resizeImage(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = reject;
@@ -28,15 +42,10 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
         const img = new Image();
         img.onerror = reject;
         img.onload = () => {
-          let { width, height } = img;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
-            else { width = Math.round(width * maxDim / height); height = maxDim; }
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = width; canvas.height = height;
-          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", quality));
+          resolve({
+            full: drawResized(img, 2000, 0.85),
+            thumb: drawResized(img, 480, 0.7),
+          });
         };
         img.src = e.target.result;
       };
@@ -56,8 +65,9 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     setUploading(true);
     try {
       const resized = await Promise.all(files.map(f => resizeImage(f)));
-      const next = [...uploadedPhotos, ...resized];
-      onUpdate({ photos: next });
+      const next = [...uploadedPhotos, ...resized.map(r => r.full)];
+      const nextThumbs = [...(scene.photoThumbs || []), ...resized.map(r => r.thumb)];
+      onUpdate({ photos: next, photoThumbs: nextThumbs });
       setActivePhoto(next.length - resized.length);
       if (all.length > files.length) onToast?.(`Only added ${files.length} — maximum ${MAX_PHOTOS} photos per card`);
     } finally {
@@ -67,7 +77,8 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
   function removeActivePhoto() {
     if (!uploadedPhotos.length) return;
     const next = uploadedPhotos.filter((_, i) => i !== activePhoto);
-    onUpdate({ photos: next });
+    const nextThumbs = (scene.photoThumbs || []).filter((_, i) => i !== activePhoto);
+    onUpdate({ photos: next, photoThumbs: nextThumbs });
     setActivePhoto(Math.max(0, activePhoto - 1));
   }
 

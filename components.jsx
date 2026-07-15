@@ -4,6 +4,10 @@ const { useState, useEffect } = React;
 // CSS class for a tag value ("I+E" isn't a valid class token as-is)
 function tagCls(v) { return v === "I+E" ? "inte" : v.toLowerCase(); }
 
+// Small pre-generated cover for cards/rows/mini-thumbs — avoids decoding full-res
+// photos just to paint a tiny crop when many scenes are visible at once.
+function coverPhoto(scene) { return (scene.photoThumbs && scene.photoThumbs[0]) || (scene.photos && scene.photos[0]); }
+
 
 // ── Icons (single-stroke, 16px) ────────────────────────────
 function Icon({ name, size=16 }) {
@@ -141,7 +145,7 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
       </div>
       <div className="img" onClick={onOpen}>
         {scene.photos && scene.photos.length ? (
-          <img src={scene.photos[0]} alt={scene.slug}
+          <img src={coverPhoto(scene)} alt={scene.slug}
                style={{width:"100%",aspectRatio:"16 / 9",objectFit:"cover",display:"block"}}/>
         ) : (
           <Placeholder country={ep?.country} hint={scene.photoHint} aspect="16 / 9"/>
@@ -248,7 +252,7 @@ function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onD
       <span className="drag-handle" title="Drag to reorder"><Icon name="drag" size={13}/></span>
       <div className="row-thumb">
         {scene.photos && scene.photos.length ? (
-          <img src={scene.photos[0]} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+          <img src={coverPhoto(scene)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
         ) : (
           <Placeholder country={ep?.country} hint={scene.photoHint} aspect="16 / 9"/>
         )}
