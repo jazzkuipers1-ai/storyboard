@@ -131,6 +131,9 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
 
   return (
     <div className="modal-bg" onClick={onClose}>
+      <button className="modal-close-mobile" onClick={onClose} title="Close">
+        <Icon name="close" size={16}/>
+      </button>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="scene-detail">
           <div className="gallery">
