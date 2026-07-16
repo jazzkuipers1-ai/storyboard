@@ -26,6 +26,7 @@ function clusterByLocation(list) {
       key,
       name: inBucket[0].group || inBucket[0].slug,
       address: inBucket.find(s => s.address)?.address || "",
+      locationId: inBucket.find(s => s.locationId)?.locationId || "",
       scenes: inBucket,
     };
   });
@@ -176,7 +177,8 @@ function App() {
       list = list.filter(s =>
         s.slug.toLowerCase().includes(q) ||
         s.address.toLowerCase().includes(q) ||
-        (s.group || "").toLowerCase().includes(q)
+        (s.group || "").toLowerCase().includes(q) ||
+        (s.locationId || "").toLowerCase().includes(q)
       );
     }
     return [...list].sort((a, b) => (a.shootIndex ?? 999) - (b.shootIndex ?? 999));
@@ -633,12 +635,12 @@ function App() {
 
   function exportCSV(list) {
     const rows_ = list || scenes;
-    const header = ["Episode","Scene","INT/EXT","Day/Night","Location","Address","Country","Status","Group","Script Day","Notes"];
+    const header = ["Episode","Scene","INT/EXT","Day/Night","Location ID","Location","Address","Country","Status","Group","Script Day","Notes"];
     const rows = rows_.map(s => {
       const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
       return [
         isFilm ? "" : ep?.n,
-        s.scene, s.intExt, s.dn, s.slug, s.address, ep?.country,
+        s.scene, s.intExt, s.dn, s.locationId || "", s.slug, s.address, ep?.country,
         STATUS[s.status]?.label || s.status, s.group || "", s.shootDay || "", s.notes || "",
       ];
     });
@@ -661,7 +663,7 @@ function App() {
   // when ungrouped) — for a printable/shareable address list, not a per-scene sheet.
   function exportLocationsCSV(list) {
     const clusters = list ? clusterByLocation(list) : locationClusters;
-    const header = ["Location", "Address", "Scenes", "Episodes", "Countries"];
+    const header = ["Location ID", "Location", "Address", "Scenes", "Episodes", "Countries"];
     const rows = clusters.map(c => {
       const eps = [...new Set(c.scenes.map(s => {
         const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
@@ -671,7 +673,7 @@ function App() {
         const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
         return ep?.country || "";
       }).filter(Boolean))];
-      return [c.name, c.address, c.scenes.length, isFilm ? "" : eps.join(", "), countries.join(", ")];
+      return [c.locationId || "", c.name, c.address, c.scenes.length, isFilm ? "" : eps.join(", "), countries.join(", ")];
     });
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csv = [header, ...rows].map(r => r.map(esc).join(",")).join("\n");
@@ -751,7 +753,7 @@ function App() {
                       ? <img src={coverPhoto(withPhoto)} alt=""/>
                       : <Icon name="pin" size={12}/>; })()}
                   </span>
-                  <span className="name">{c.name}</span>
+                  <span className="name">{c.locationId ? `${c.locationId} · ` : ""}{c.name}</span>
                   {c.address && <span className="addr">{c.address}</span>}
                   <span className="count">{c.scenes.length} scenes</span>
                 </div>
@@ -843,7 +845,7 @@ function App() {
                       return (
                         <div className="mini" key={s.id} onClick={() => setOpenSceneId(s.id)} style={{cursor:"default"}}>
                           <Placeholder country={ep?.country} hint={s.photoHint} small/>
-                          <div className="t">{s.slug}</div>
+                          <div className="t">{s.locationId ? `${s.locationId} · ` : ""}{s.slug}</div>
                           <div className="m">{isFilm ? "" : `EP ${ep?.n} · `}SC {String(s.scene).padStart(2,"0")} · {s.intExt}/{s.dn}</div>
                         </div>
                       );

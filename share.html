@@ -137,7 +137,7 @@
         card.innerHTML = `
           ${photo ? `<img src="${esc(photo)}" alt="">` : `<div class="ph">${esc(s.photoHint || '')}</div>`}
           <div class="body">
-            <div class="name">${esc(s.slug || '')}</div>
+            <div class="name">${s.locationId ? `${esc(s.locationId)} · ` : ''}${esc(s.slug || '')}</div>
             <div class="ribbon">
               <span class="tag ${esc((s.intExt || '').toLowerCase().replace('+',''))}">${esc(s.intExt || '')}</span>
               <span class="tag ${esc((s.dn || '').toLowerCase())}">${esc(s.dn || '')}</span>

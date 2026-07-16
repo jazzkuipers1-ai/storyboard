@@ -10,6 +10,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
   const [activePhoto, setActivePhoto] = useState(0);
   const [notes, setNotes] = useState(scene.notes);
   const [slug, setSlug] = useState(scene.slug);
+  const [locId, setLocId] = useState(scene.locationId ?? "");
   const [sceneNum, setSceneNum] = useState(scene.scene);
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -113,7 +114,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     if (activePhoto === from) setActivePhoto(to);
   }
 
-  useEffect(() => { setSlug(scene.slug); setSceneNum(scene.scene); setNotes(scene.notes); }, [scene.id]);
+  useEffect(() => { setSlug(scene.slug); setLocId(scene.locationId ?? ""); setSceneNum(scene.scene); setNotes(scene.notes); }, [scene.id]);
 
   function handleGroupPick(val) {
     if (val === "__new__") {
@@ -235,6 +236,20 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                   onBlur={() => onUpdate({ scene: sceneNum.trim() || scene.scene })}
                   style={{
                     width:72,border:"1px solid var(--line)",borderRadius:6,
+                    padding:"5px 8px",fontSize:13,fontFamily:"var(--mono)",background:"var(--bg)",
+                  }}
+                />
+              </div>
+              <div className="row" style={{marginTop:10,gap:6,alignItems:"center"}}>
+                <span style={{fontSize:11.5,color:"var(--ink-3)",fontFamily:"var(--mono)"}}>ID</span>
+                <input
+                  type="text"
+                  value={locId}
+                  onChange={e => setLocId(e.target.value)}
+                  onBlur={() => onUpdate({ locationId: locId })}
+                  placeholder="Location ID"
+                  style={{
+                    width:100,border:"1px solid var(--line)",borderRadius:6,
                     padding:"5px 8px",fontSize:13,fontFamily:"var(--mono)",background:"var(--bg)",
                   }}
                 />

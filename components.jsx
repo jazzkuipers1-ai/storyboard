@@ -101,11 +101,12 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [num, setNum] = useState(scene.scene);
+  const [locId, setLocId] = useState(scene.locationId ?? "");
   const [loc, setLoc] = useState(scene.slug);
   const [addr, setAddr] = useState(scene.address);
   const [desc, setDesc] = useState(scene.notes);
   const [scriptDay, setScriptDay] = useState(scene.shootDay ?? "");
-  useEffect(() => { setNum(scene.scene); setLoc(scene.slug); setAddr(scene.address); setDesc(scene.notes); setScriptDay(scene.shootDay ?? ""); }, [scene.id]);
+  useEffect(() => { setNum(scene.scene); setLocId(scene.locationId ?? ""); setLoc(scene.slug); setAddr(scene.address); setDesc(scene.notes); setScriptDay(scene.shootDay ?? ""); }, [scene.id]);
 
   const stop = e => e.stopPropagation();
 
@@ -129,13 +130,24 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
           onChange={e => setNum(e.target.value)}
           onBlur={() => onUpdate({ scene: num.trim() || scene.scene })}
         />
-        <input
-          className="tb-loc"
-          value={loc}
-          onClick={stop}
-          onChange={e => setLoc(e.target.value)}
-          onBlur={() => onUpdate({ slug: loc })}
-        />
+        <div className="tb-title-row">
+          <input
+            className="tb-locid"
+            value={locId}
+            placeholder="ID"
+            title="Location ID"
+            onClick={stop}
+            onChange={e => setLocId(e.target.value)}
+            onBlur={() => onUpdate({ locationId: locId })}
+          />
+          <input
+            className="tb-loc"
+            value={loc}
+            onClick={stop}
+            onChange={e => setLoc(e.target.value)}
+            onBlur={() => onUpdate({ slug: loc })}
+          />
+        </div>
         <button className="card-expand-btn" title="Open full details" onClick={onOpen}><Icon name="eye" size={12}/></button>
         <button
           className="card-menu-btn"
@@ -241,9 +253,10 @@ function SideItem({ active, onClick, children, count, dot, flag, onDelete }) {
 // ── Scene row (compact list layout) ────────────────────────
 function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onDragOver, onDrop, onDragEnd, dragOver, onDuplicate, onDelete }) {
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
+  const [locId, setLocId] = useState(scene.locationId ?? "");
   const [loc, setLoc] = useState(scene.slug);
   const [addr, setAddr] = useState(scene.address);
-  useEffect(() => { setLoc(scene.slug); setAddr(scene.address); }, [scene.id]);
+  useEffect(() => { setLocId(scene.locationId ?? ""); setLoc(scene.slug); setAddr(scene.address); }, [scene.id]);
   const stop = e => e.stopPropagation();
 
   return (
@@ -278,6 +291,9 @@ function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onD
         <option value="DUSK">DUSK</option>
         <option value="DAWN">DAWN</option>
       </select>
+      <input className="row-locid" value={locId} placeholder="ID" title="Location ID" onClick={stop}
+             onChange={e => setLocId(e.target.value)}
+             onBlur={() => onUpdate({ locationId: locId })}/>
       <input className="row-loc" value={loc} onClick={stop}
              onChange={e => setLoc(e.target.value)}
              onBlur={() => onUpdate({ slug: loc })}/>
@@ -335,7 +351,7 @@ function PrintSheets({ scenes, isFilm, perPage, computePrintPages, projectName }
                         <span className={`tag ${tagCls(s.intExt)}`}>{s.intExt}</span>
                         <span className={`tag ${tagCls(s.dn)}`}>{s.dn}</span>
                       </div>
-                      <div className="print-name">{s.slug}</div>
+                      <div className="print-name">{s.locationId ? `${s.locationId} · ` : ""}{s.slug}</div>
                       <div className="print-addr">{s.address}</div>
                       {s.notes ? <div className="print-notes">{s.notes}</div> : null}
                     </div>
