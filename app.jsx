@@ -110,7 +110,14 @@ function App() {
   const [view, setView] = useState("grid"); // grid | groups | map
   const [filter, setFilter] = useState({ kind: "all", value: null }); // all | episode | country | status | group
   const [search, setSearch] = useState("");
-  const [openScene, setOpenScene] = useState(null);
+  // Only the id is stored — the scene object itself is always looked up fresh
+  // from `scenes` below, so the open modal never shows/writes from a stale
+  // snapshot. Storing the whole object separately meant a realtime update (or
+  // even this client's own edit to a different field) wouldn't reach it, so
+  // a photo upload could compute its next photos array off out-of-date data
+  // and silently drop whatever had just landed.
+  const [openSceneId, setOpenSceneId] = useState(null);
+  const openScene = openSceneId ? (scenes.find(s => s.id === openSceneId) || null) : null;
   const [showImport, setShowImport] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [shareScope, setShareScope] = useState(null); // null = whole storyboard, or { type:"group", name }
@@ -239,58 +246,56 @@ function App() {
 
   function updateScene(id, patch) {
     setScenes(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
-    if (openScene?.id === id) setOpenScene(prev => ({ ...prev, ...patch }));
     scheduleScenePatch(id, patch);
   }
   function deleteScene(id) {
     if (!window.confirm("Delete this scene? This can't be undone.")) return;
     setScenes(prev => prev.filter(s => s.id !== id));
-    if (openScene?.id === id) setOpenScene(null);
+    if (openSceneId === id) setOpenSceneId(null);
     setToast("Scene deleted");
     delete scenePatchRef.current[id];
     if (project?.id) window.SB_DATA.deleteSceneById(project.id, id).catch(err => { console.error("Delete scene failed", err); setSaveState("error"); });
   }
+  // These three compute the value they need to persist from the `scenes`
+  // closure *before* calling setScenes, rather than inside the updater
+  // callback — React doesn't guarantee an updater function runs synchronously
+  // before the next line executes, so a variable assigned inside one (and
+  // read immediately after, like the original code did) could still be null
+  // when the persistence call ran, silently skipping the save entirely.
   function duplicateScene(id) {
-    let copy = null;
+    const idx = scenes.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const src = scenes[idx];
+    const copy = { ...src, id: `dup${Date.now()}${Math.random().toString(36).slice(2,6)}`, comments: [...src.comments] };
     setScenes(prev => {
-      const idx = prev.findIndex(s => s.id === id);
-      if (idx === -1) return prev;
-      const src = prev[idx];
-      copy = { ...src, id: `dup${Date.now()}${Math.random().toString(36).slice(2,6)}`, comments: [...src.comments] };
+      const pidx = prev.findIndex(s => s.id === id);
+      if (pidx === -1) return prev;
       const next = [...prev];
-      next.splice(idx + 1, 0, copy);
+      next.splice(pidx + 1, 0, copy);
       return next;
     });
     setToast("Scene duplicated");
-    if (copy && project?.id) window.SB_DATA.duplicateSceneAfter(project.id, id, copy).catch(err => { console.error("Duplicate scene failed", err); setSaveState("error"); });
+    if (project?.id) window.SB_DATA.duplicateSceneAfter(project.id, id, copy).catch(err => { console.error("Duplicate scene failed", err); setSaveState("error"); });
   }
   function reorderScene(dragId, targetId) {
     if (dragId === targetId) return;
-    let orderedIds = null;
-    setScenes(prev => {
-      const list = [...prev];
-      const from = list.findIndex(s => s.id === dragId);
-      const to = list.findIndex(s => s.id === targetId);
-      if (from === -1 || to === -1) return prev;
-      const [moved] = list.splice(from, 1);
-      list.splice(to, 0, moved);
-      orderedIds = list.map(s => s.id);
-      return list;
-    });
-    if (orderedIds && project?.id) window.SB_DATA.reorderScenes(project.id, orderedIds).catch(err => { console.error("Reorder scenes failed", err); setSaveState("error"); });
+    const list = [...scenes];
+    const from = list.findIndex(s => s.id === dragId);
+    const to = list.findIndex(s => s.id === targetId);
+    if (from === -1 || to === -1) return;
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    const orderedIds = list.map(s => s.id);
+    setScenes(list);
+    if (project?.id) window.SB_DATA.reorderScenes(project.id, orderedIds).catch(err => { console.error("Reorder scenes failed", err); setSaveState("error"); });
   }
   function addComment(id, comment) {
-    let nextComments = null;
-    setScenes(prev => prev.map(s => {
-      if (s.id !== id) return s;
-      nextComments = [...s.comments, comment];
-      return { ...s, comments: nextComments };
-    }));
-    if (openScene?.id === id) {
-      setOpenScene(prev => ({ ...prev, comments: [...prev.comments, comment] }));
-    }
+    const target = scenes.find(s => s.id === id);
+    if (!target) return;
+    const nextComments = [...target.comments, comment];
+    setScenes(prev => prev.map(s => s.id === id ? { ...s, comments: nextComments } : s));
     setToast("Comment added");
-    if (nextComments && project?.id) window.SB_DATA.mergeScenePatch(project.id, id, { comments: nextComments }).catch(err => { console.error("Save comment failed", err); setSaveState("error"); });
+    if (project?.id) window.SB_DATA.mergeScenePatch(project.id, id, { comments: nextComments }).catch(err => { console.error("Save comment failed", err); setSaveState("error"); });
   }
   function acceptSuggestion(sug) {
     setScenes(prev => prev.map(s => sug.sceneIds.includes(s.id) ? { ...s, group: sug.name } : s));
@@ -594,7 +599,7 @@ function App() {
     const commonProps = s => ({
       key: s.id,
       scene: s,
-      onOpen: () => setOpenScene(s),
+      onOpen: () => setOpenSceneId(s.id),
       onUpdate: patch => updateScene(s.id, patch),
       isFilm,
       draggable: true,
@@ -741,7 +746,7 @@ function App() {
                     {g.items.map(s => {
                       const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
                       return (
-                        <div className="mini" key={s.id} onClick={() => setOpenScene(s)} style={{cursor:"default"}}>
+                        <div className="mini" key={s.id} onClick={() => setOpenSceneId(s.id)} style={{cursor:"default"}}>
                           <Placeholder country={ep?.country} hint={s.photoHint} small/>
                           <div className="t">{s.slug}</div>
                           <div className="m">{isFilm ? "" : `EP ${ep?.n} · `}SC {String(s.scene).padStart(2,"0")} · {s.intExt}/{s.dn}</div>
@@ -872,7 +877,7 @@ function App() {
 
             {/* Pins */}
             {clusters.map((c,i) => (
-              <g key={i} style={{cursor:"default"}} onClick={() => c.items[0] && setOpenScene(c.items[0])}>
+              <g key={i} style={{cursor:"default"}} onClick={() => c.items[0] && setOpenSceneId(c.items[0].id)}>
                 <circle cx={c.x} cy={c.y + 10} r="4" fill="rgba(0,0,0,0.15)"/>
                 <circle cx={c.x} cy={c.y} r="14" fill="var(--accent)" stroke="var(--bg-elev)" strokeWidth="2"/>
                 <text x={c.x} y={c.y + 4} textAnchor="middle" fill="white" fontSize="11" fontWeight="600" fontFamily="var(--mono)">
@@ -973,11 +978,11 @@ function App() {
           scene={openScene}
           groupNames={groupNames}
           isFilm={isFilm}
-          onClose={() => setOpenScene(null)}
+          onClose={() => setOpenSceneId(null)}
           onUpdate={patch => updateScene(openScene.id, patch)}
           onAddComment={c => addComment(openScene.id, c)}
           onCreateGroup={name => createGroup(name)}
-          onDuplicate={() => { duplicateScene(openScene.id); setOpenScene(null); }}
+          onDuplicate={() => { duplicateScene(openScene.id); setOpenSceneId(null); }}
           onDelete={() => { deleteScene(openScene.id); }}
           onToast={setToast}
         />

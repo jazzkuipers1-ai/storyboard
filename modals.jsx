@@ -19,9 +19,13 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
   const photos = uploadedPhotos.length ? uploadedPhotos : [scene.photoHint];
   const isUploaded = i => uploadedPhotos.length > 0;
 
-  // Resize client-side, once per upload, into two sizes:
-  // - "full" (2000px longest edge, q .85) for the detail view / print export
-  // - "thumb" (480px longest edge, q .7) for card/row/mini covers, so boards with
+  // Resize client-side, once per upload, into two sizes. These only ever need
+  // to look sharp printed on A4 (never full-bleed, always one of several
+  // cards on a page) — not archival quality — so both are kept small: a
+  // smaller payload uploads and syncs faster, which also narrows the window
+  // for the kind of concurrent-edit race that used to lose photos.
+  // - "full" (1400px longest edge, q .78) for the detail view / print export
+  // - "thumb" (360px longest edge, q .65) for card/row/mini covers, so boards with
   //   many scenes don't decode dozens of full-res images just to show a small crop
   function drawResized(img, maxDim, quality) {
     let { width, height } = img;
@@ -43,8 +47,8 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
         img.onerror = reject;
         img.onload = () => {
           resolve({
-            full: drawResized(img, 2000, 0.85),
-            thumb: drawResized(img, 480, 0.7),
+            full: drawResized(img, 1400, 0.78),
+            thumb: drawResized(img, 360, 0.65),
           });
         };
         img.src = e.target.result;
@@ -198,7 +202,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                 </div>
               ))}
               {uploadedPhotos.length < MAX_PHOTOS && (
-                <button className="add" title="Add photo" onClick={() => fileInputRef.current?.click()}>
+                <button className="add" title="Add photo" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
                   <Icon name="plus" size={14}/>
                 </button>
               )}

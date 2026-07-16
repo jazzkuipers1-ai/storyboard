@@ -128,13 +128,24 @@
   // Live sync: fires on any change to this project's data, from any device or
   // collaborator (Realtime is enabled on the project_data table). Returns an
   // unsubscribe function.
+  //
+  // Deliberately re-fetches instead of trusting the broadcast payload: Realtime's
+  // postgres_changes messages have a size cap, and `scenes` — full of base64
+  // photos — routinely blows past it on any real project, silently dropping
+  // that key from payload.new. Treating the event as just a "something
+  // changed, go check" signal and re-fetching over plain REST (no such size
+  // limit) means collaborators' views actually stay in sync once photos are
+  // involved, instead of quietly missing updates.
   function subscribeToProjectData(projectId, onChange) {
     const channel = sb
       .channel("project_data:" + projectId)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "project_data", filter: "project_id=eq." + projectId },
-        (payload) => onChange(payload.new)
+        async () => {
+          const fresh = await getProjectData(projectId);
+          if (fresh) onChange(fresh);
+        }
       )
       .subscribe();
     return () => sb.removeChannel(channel);
