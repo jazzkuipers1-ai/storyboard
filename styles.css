@@ -936,8 +936,32 @@ input, textarea { font-family: inherit; color: inherit; }
   border: 1.5px solid transparent;
   overflow: hidden;
   flex-shrink: 0;
+  position: relative;
+  cursor: grab;
 }
 .scene-detail .gallery .thumbs .t.active { border-color: var(--ink); }
+.scene-detail .gallery .thumbs .t-primary {
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: rgba(0,0,0,.55); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.scene-detail .gallery .thumbs .t-move {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 2px;
+  opacity: 0; transition: opacity .12s;
+  background: linear-gradient(to bottom, rgba(0,0,0,.15), transparent 30%, transparent 70%, rgba(0,0,0,.15));
+}
+.scene-detail .gallery .thumbs .t:hover .t-move { opacity: 1; }
+.scene-detail .gallery .thumbs .t-move button {
+  appearance: none; border: 0; border-radius: 50%;
+  width: 16px; height: 16px;
+  background: rgba(0,0,0,.55); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.scene-detail .gallery .thumbs .t-move button:hover { background: rgba(0,0,0,.75); }
 .scene-detail .gallery .thumbs .add {
   width: 64px; height: 48px;
   border-radius: 5px;

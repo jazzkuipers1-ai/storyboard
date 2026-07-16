@@ -53,6 +53,8 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     });
   }
 
+  const photoGeo = scene.photoGeo || [];
+
   async function handleFiles(fileList) {
     const all = [...fileList].filter(f => f.type.startsWith("image/"));
     if (!all.length) return;
@@ -66,19 +68,19 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     try {
       // GPS lives in EXIF, which the resize (drawn through a <canvas>) strips —
       // so it has to be read from the original file, before resizeImage runs.
+      // Kept per-photo (not one scene-wide field) so the map link can always
+      // follow whichever photo is first, even after reordering or removal.
       const [resized, gpsHits] = await Promise.all([
         Promise.all(files.map(f => resizeImage(f))),
         Promise.all(files.map(f => window.extractPhotoGPS?.(f) ?? Promise.resolve(null))),
       ]);
       const next = [...uploadedPhotos, ...resized.map(r => r.full)];
       const nextThumbs = [...(scene.photoThumbs || []), ...resized.map(r => r.thumb)];
-      const geo = gpsHits.find(Boolean) || scene.geo;
-      const patch = { photos: next, photoThumbs: nextThumbs };
-      if (geo) patch.geo = geo;
-      onUpdate(patch);
+      const nextGeo = [...photoGeo, ...gpsHits];
+      onUpdate({ photos: next, photoThumbs: nextThumbs, photoGeo: nextGeo });
       setActivePhoto(next.length - resized.length);
       if (all.length > files.length) onToast?.(`Only added ${files.length} — maximum ${MAX_PHOTOS} photos per card`);
-      if (gpsHits.some(Boolean) && !scene.geo) onToast?.("📍 Google Maps link updated from photo location");
+      if (gpsHits.some(Boolean) && !photoGeo.some(Boolean)) onToast?.("📍 Google Maps link updated from photo location");
     } finally {
       setUploading(false);
     }
@@ -87,8 +89,24 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     if (!uploadedPhotos.length) return;
     const next = uploadedPhotos.filter((_, i) => i !== activePhoto);
     const nextThumbs = (scene.photoThumbs || []).filter((_, i) => i !== activePhoto);
-    onUpdate({ photos: next, photoThumbs: nextThumbs });
+    const nextGeo = photoGeo.filter((_, i) => i !== activePhoto);
+    onUpdate({ photos: next, photoThumbs: nextThumbs, photoGeo: nextGeo });
     setActivePhoto(Math.max(0, activePhoto - 1));
+  }
+  function movePhoto(from, to) {
+    if (to < 0 || to >= uploadedPhotos.length) return;
+    const reorder = (arr) => {
+      const copy = [...arr];
+      const [item] = copy.splice(from, 1);
+      copy.splice(to, 0, item);
+      return copy;
+    };
+    onUpdate({
+      photos: reorder(uploadedPhotos),
+      photoThumbs: reorder(scene.photoThumbs || []),
+      photoGeo: reorder(photoGeo),
+    });
+    if (activePhoto === from) setActivePhoto(to);
   }
 
   useEffect(() => { setSlug(scene.slug); setSceneNum(scene.scene); setNotes(scene.notes); }, [scene.id]);
@@ -104,8 +122,11 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     onUpdate({ group: val || null });
   }
 
-  // Prefer the exact spot a photo was taken (from its EXIF GPS) over the free-text address.
-  const mapsQuery = scene.geo ? `${scene.geo.lat},${scene.geo.lng}` : scene.address;
+  // Prefer the exact spot the *first* photo was taken (from its EXIF GPS) over
+  // the free-text address — reordering or removing photos naturally updates
+  // this, since it always reads whichever photo is currently in slot 0.
+  const primaryGeo = photoGeo[0] || scene.geo; // scene.geo: back-compat with scenes saved before per-photo GPS
+  const mapsQuery = primaryGeo ? `${primaryGeo.lat},${primaryGeo.lng}` : scene.address;
   const mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapsQuery);
 
   return (
@@ -137,9 +158,37 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
             </div>
             <div className="thumbs">
               {photos.map((p,i) => (
-                <div key={i} className={"t" + (i===activePhoto?" active":"")} onClick={()=>setActivePhoto(i)}>
+                <div key={i} className={"t" + (i===activePhoto?" active":"")}
+                     draggable={isUploaded(i)}
+                     onClick={()=>setActivePhoto(i)}
+                     onDragStart={e => { if (isUploaded(i)) e.dataTransfer.setData("text/plain", String(i)); }}
+                     onDragOver={e => { if (isUploaded(i)) e.preventDefault(); }}
+                     onDrop={e => {
+                       if (!isUploaded(i)) return;
+                       e.preventDefault();
+                       const from = Number(e.dataTransfer.getData("text/plain"));
+                       if (!Number.isNaN(from) && from !== i) movePhoto(from, i);
+                     }}
+                >
                   {isUploaded(i) ? (
-                    <img src={p} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    <>
+                      <img src={p} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                      {i === 0 && <span className="t-primary" title="Used for the Google Maps link"><Icon name="pin" size={9}/></span>}
+                      {uploadedPhotos.length > 1 && (
+                        <div className="t-move">
+                          {i > 0 && (
+                            <button title="Move earlier" style={{transform:"scaleX(-1)"}} onClick={e => { e.stopPropagation(); movePhoto(i, i - 1); }}>
+                              <Icon name="chevR" size={9}/>
+                            </button>
+                          )}
+                          {i < uploadedPhotos.length - 1 && (
+                            <button title="Move later" onClick={e => { e.stopPropagation(); movePhoto(i, i + 1); }}>
+                              <Icon name="chevR" size={9}/>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <Placeholder country={ep?.country} hint={p} aspect="auto" small/>
                   )}
@@ -230,9 +279,9 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                 <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
                   Open in Maps <Icon name="ext" size={11}/>
                 </a>
-                {scene.geo && (
-                  <span style={{marginLeft:8,fontSize:11,color:"var(--ink-3)"}} title={`${scene.geo.lat.toFixed(5)}, ${scene.geo.lng.toFixed(5)}`}>
-                    📍 from photo location
+                {primaryGeo && (
+                  <span style={{marginLeft:8,fontSize:11,color:"var(--ink-3)"}} title={`${primaryGeo.lat.toFixed(5)}, ${primaryGeo.lng.toFixed(5)}`}>
+                    📍 from 1st photo
                   </span>
                 )}
               </dd>
