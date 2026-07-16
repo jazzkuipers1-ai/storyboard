@@ -746,6 +746,25 @@ input, textarea { font-family: inherit; color: inherit; }
 }
 .desc-edit:hover, .desc-edit:focus { border-color: var(--line); background: var(--bg-sunk); }
 .desc-edit::placeholder { color: var(--ink-4); }
+/* Era/continuity/tag bookkeeping from a chrono import — visually set apart
+   from the actual scene description with a gap above, italic, and a muted
+   color, rather than reading as more of the description. */
+.info-edit {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ink-4);
+  padding: 4px;
+  border-radius: 4px;
+  outline: none;
+  margin-top: 10px;
+  resize: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+.info-edit:hover, .info-edit:focus { border-color: var(--line); background: var(--bg-sunk); }
 .status-select {
   appearance: none;
   border: 1px solid transparent;
@@ -1093,6 +1112,23 @@ input, textarea { font-family: inherit; color: inherit; }
   resize: vertical;
 }
 .notes-area:focus { border-color: var(--ink-3); }
+/* Same "set apart from the description" treatment as the card's .info-edit —
+   a gap above, italic, muted — for screenplay bookkeeping (era, continuity,
+   tags) rather than the actual scouting notes. */
+.info-area {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--ink-4);
+  outline: none;
+  width: 100%;
+  resize: vertical;
+  margin-top: 8px;
+}
+.info-area:hover, .info-area:focus { border-color: var(--line); background: var(--bg-sunk); }
 
 .comments {
   margin-top: 4px;
@@ -1518,6 +1554,10 @@ input, textarea { font-family: inherit; color: inherit; }
 .print-notes {
   font-size: 10px; color: #33322D; margin-top: 1.5mm; line-height: 1.3; flex-shrink: 0;
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.print-info {
+  font-size: 9px; font-style: italic; color: #8A8578; margin-top: 1.5mm; line-height: 1.3; flex-shrink: 0;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
 }
 
 /* ── Mobile / tablet shell (phones + iPad) ─────────────────── */

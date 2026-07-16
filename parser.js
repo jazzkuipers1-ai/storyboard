@@ -171,12 +171,12 @@
       .toUpperCase()
       .replace(/\s*\/\s*/g, " / ");
 
-    // Keep notes to just the synopsis (plus a compact period marker) — the
-    // scene description is what a location scout actually needs to see at a
-    // glance on the card. Screenplay-internal bookkeeping (page length,
-    // continuity numbers, story-day refs, camera/safety tags) is kept, but
-    // folded into a single short trailing line instead of competing for the
-    // same limited card space with blank-line paragraph breaks.
+    // notes is just the synopsis — the scene description is what a location
+    // scout actually needs to see at a glance on the card. Screenplay-internal
+    // bookkeeping (era, page length, continuity numbers, story-day refs,
+    // camera/safety tags) goes in sceneInfo instead, a separate field so it
+    // can be styled (small, italic, muted) without competing with the actual
+    // description for attention or living inside the same plain-text box.
     const eraLine = [raw.eraRaw, raw.year].filter(Boolean).join(" ").trim();
     const metaBits = [];
     if (raw.pagelen) metaBits.push(raw.pagelen);
@@ -185,8 +185,9 @@
     const tagText = raw.tags.join(" ").trim();
     if (tagText) metaBits.push(tagText);
 
-    const notes = [
-      raw.synopsis + (eraLine ? ` (${eraLine})` : ""),
+    const notes = raw.synopsis || "";
+    const sceneInfo = [
+      eraLine ? `(${eraLine})` : "",
       metaBits.length ? metaBits.join(" · ") : "",
     ].filter(Boolean).join("\n");
 
@@ -200,6 +201,7 @@
       slug,
       address: raw.place ? titleCaseWord(raw.place.replace(/\?$/, "")) : "",
       notes,
+      sceneInfo,
       photoHint: PH_HINTS[i % PH_HINTS.length],
     };
   }

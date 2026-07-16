@@ -105,8 +105,9 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
   const [loc, setLoc] = useState(scene.slug);
   const [addr, setAddr] = useState(scene.address);
   const [desc, setDesc] = useState(scene.notes);
+  const [info, setInfo] = useState(scene.sceneInfo ?? "");
   const [scriptDay, setScriptDay] = useState(scene.shootDay ?? "");
-  useEffect(() => { setNum(scene.scene); setLocId(scene.locationId ?? ""); setLoc(scene.slug); setAddr(scene.address); setDesc(scene.notes); setScriptDay(scene.shootDay ?? ""); }, [scene.id]);
+  useEffect(() => { setNum(scene.scene); setLocId(scene.locationId ?? ""); setLoc(scene.slug); setAddr(scene.address); setDesc(scene.notes); setInfo(scene.sceneInfo ?? ""); setScriptDay(scene.shootDay ?? ""); }, [scene.id]);
 
   const stop = e => e.stopPropagation();
 
@@ -205,6 +206,16 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
           onBlur={() => onUpdate({ notes: desc })}
           rows={size === "lg" ? 6 : 4}
         />
+        {scene.sceneInfo ? (
+          <textarea
+            className="info-edit"
+            value={info}
+            onClick={stop}
+            onChange={e => setInfo(e.target.value)}
+            onBlur={() => onUpdate({ sceneInfo: info })}
+            rows={2}
+          />
+        ) : null}
         <div className="foot">
           <div className="scriptday-edit">
             <span className="sd-lbl">SCRIPT DAY</span>
@@ -354,6 +365,7 @@ function PrintSheets({ scenes, isFilm, perPage, computePrintPages, projectName }
                       <div className="print-name">{s.locationId ? `${s.locationId} · ` : ""}{s.slug}</div>
                       <div className="print-addr">{s.address}</div>
                       {s.notes ? <div className="print-notes">{s.notes}</div> : null}
+                      {s.sceneInfo ? <div className="print-info">{s.sceneInfo}</div> : null}
                     </div>
                   </div>
                 );

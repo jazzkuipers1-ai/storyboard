@@ -121,6 +121,18 @@
     const { error } = await sb.rpc("duplicate_scene_after", { p_project_id: projectId, p_source_scene_id: sourceSceneId, p_new_scene: newScene });
     if (error) throw error;
   }
+  // Content-keyed, not index-keyed — safe even if the array changed
+  // concurrently, and a deletion this way is final (there's no separate
+  // storage/blob to leave an orphaned copy in — the array entry *is* the
+  // photo, so removing it is already "permanently deleted, frees the space").
+  async function appendScenePhoto(projectId, sceneId, photo, thumb, geo) {
+    const { error } = await sb.rpc("append_scene_photo", { p_project_id: projectId, p_scene_id: sceneId, p_photo: photo, p_thumb: thumb, p_geo: geo });
+    if (error) throw error;
+  }
+  async function removeScenePhoto(projectId, sceneId, photo) {
+    const { error } = await sb.rpc("remove_scene_photo", { p_project_id: projectId, p_scene_id: sceneId, p_photo: photo });
+    if (error) throw error;
+  }
   async function reorderScenes(projectId, orderedIds) {
     const { error } = await sb.rpc("reorder_scenes", { p_project_id: projectId, p_ordered_ids: orderedIds });
     if (error) throw error;
@@ -222,6 +234,7 @@
     listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
     subscribeToProjectData,
     mergeScenePatch, deleteSceneById, appendScenes, duplicateSceneAfter, reorderScenes,
+    appendScenePhoto, removeScenePhoto,
     listMembers, inviteMember, removeMember, sendInviteEmail,
     createShare, getSharedScenes, addSharedComment,
   };

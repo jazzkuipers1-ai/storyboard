@@ -20,10 +20,11 @@ async function reverseGeocode(lat, lng) {
   }
 }
 
-function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddComment, onCreateGroup, onDuplicate, onDelete, onToast }) {
+function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddPhoto, onRemovePhoto, onAddComment, onCreateGroup, onDuplicate, onDelete, onToast }) {
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
   const [activePhoto, setActivePhoto] = useState(0);
   const [notes, setNotes] = useState(scene.notes);
+  const [sceneInfo, setSceneInfo] = useState(scene.sceneInfo ?? "");
   const [slug, setSlug] = useState(scene.slug);
   const [locId, setLocId] = useState(scene.locationId ?? "");
   const [addr, setAddr] = useState(scene.address ?? "");
@@ -96,33 +97,28 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
         Promise.all(files.map(f => resizeImage(f))),
         Promise.all(files.map(f => window.extractPhotoGPS?.(f) ?? Promise.resolve(null))),
       ]);
-      const next = [...uploadedPhotos, ...resized.map(r => r.full)];
-      const nextThumbs = [...(scene.photoThumbs || []), ...resized.map(r => r.thumb)];
-      const nextGeo = [...photoGeo, ...gpsHits];
-      const patch = { photos: next, photoThumbs: nextThumbs, photoGeo: nextGeo };
-      // Pre-fill the address from the photo that's now in slot 0 (same photo
+      const hadNoGeoYet = !photoGeo.some(Boolean);
+      resized.forEach((r, i) => onAddPhoto(r.full, r.thumb, gpsHits[i]));
+      setActivePhoto(uploadedPhotos.length);
+      // Pre-fill the address from whichever photo ends up in slot 0 (same one
       // that drives the Maps link) — but only if there's nothing there yet,
       // so this never clobbers an address someone already typed in.
       let addressFilled = false;
-      if (!scene.address && nextGeo[0]) {
-        const found = await reverseGeocode(nextGeo[0].lat, nextGeo[0].lng);
-        if (found) { patch.address = found; addressFilled = true; }
+      const firstGeo = photoGeo[0] || gpsHits[0];
+      if (!scene.address && firstGeo) {
+        const found = await reverseGeocode(firstGeo.lat, firstGeo.lng);
+        if (found) { onUpdate({ address: found }); addressFilled = true; }
       }
-      onUpdate(patch);
-      setActivePhoto(next.length - resized.length);
       if (all.length > files.length) onToast?.(`Only added ${files.length} — maximum ${MAX_PHOTOS} photos per card`);
       if (addressFilled) onToast?.("📍 Address and Google Maps link filled in from photo location");
-      else if (gpsHits.some(Boolean) && !photoGeo.some(Boolean)) onToast?.("📍 Google Maps link updated from photo location");
+      else if (gpsHits.some(Boolean) && hadNoGeoYet) onToast?.("📍 Google Maps link updated from photo location");
     } finally {
       setUploading(false);
     }
   }
   function removeActivePhoto() {
     if (!uploadedPhotos.length) return;
-    const next = uploadedPhotos.filter((_, i) => i !== activePhoto);
-    const nextThumbs = (scene.photoThumbs || []).filter((_, i) => i !== activePhoto);
-    const nextGeo = photoGeo.filter((_, i) => i !== activePhoto);
-    onUpdate({ photos: next, photoThumbs: nextThumbs, photoGeo: nextGeo });
+    onRemovePhoto(uploadedPhotos[activePhoto]);
     setActivePhoto(Math.max(0, activePhoto - 1));
   }
   function movePhoto(from, to) {
@@ -143,7 +139,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
 
   useEffect(() => {
     setSlug(scene.slug); setLocId(scene.locationId ?? ""); setSceneNum(scene.scene); setNotes(scene.notes);
-    setAddr(scene.address ?? ""); setMapsOverride(scene.mapsOverride ?? "");
+    setAddr(scene.address ?? ""); setMapsOverride(scene.mapsOverride ?? ""); setSceneInfo(scene.sceneInfo ?? "");
   }, [scene.id]);
   // Picks up the address the moment a photo upload auto-fills it, without
   // needing to close and reopen the modal — but only into an still-empty
@@ -395,6 +391,14 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                 onChange={e => setNotes(e.target.value)}
                 onBlur={() => onUpdate({ notes })}
                 placeholder="Add scouting notes, lighting, access, parking…"
+              />
+              <textarea
+                className="info-area"
+                value={sceneInfo}
+                onChange={e => setSceneInfo(e.target.value)}
+                onBlur={() => onUpdate({ sceneInfo })}
+                placeholder="Era, continuity, tags…"
+                rows={2}
               />
             </div>
 

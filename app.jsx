@@ -324,6 +324,37 @@ function App() {
     const isPhotoEdit = "photos" in patch || "photoThumbs" in patch || "photoGeo" in patch;
     scheduleScenePatch(id, patch, { immediate: isPhotoEdit });
   }
+  // Adding/removing a single photo goes through its own atomic, content-keyed
+  // RPC (append_scene_photo / remove_scene_photo) instead of updateScene's
+  // whole-array patch — a client with stale local state (a dropped realtime
+  // connection, a long-idle tab) that later touched this scene's photos used
+  // to silently resurrect a photo someone else had already deleted, because
+  // its patch replaced the *entire* photos/photoThumbs/photoGeo arrays with
+  // its own out-of-date copy. These operate on whatever the server's current
+  // array is at write time, so that can't happen.
+  function addScenePhoto(id, photo, thumb, geo) {
+    setScenes(prev => prev.map(s => s.id === id ? {
+      ...s,
+      photos: [...(s.photos || []), photo],
+      photoThumbs: [...(s.photoThumbs || []), thumb],
+      photoGeo: [...(s.photoGeo || []), geo],
+    } : s));
+    if (project?.id) withRetry(() => window.SB_DATA.appendScenePhoto(project.id, id, photo, thumb, geo));
+  }
+  function removeScenePhoto(id, photo) {
+    setScenes(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      const idx = (s.photos || []).indexOf(photo);
+      if (idx === -1) return s;
+      return {
+        ...s,
+        photos: s.photos.filter((_, i) => i !== idx),
+        photoThumbs: (s.photoThumbs || []).filter((_, i) => i !== idx),
+        photoGeo: (s.photoGeo || []).filter((_, i) => i !== idx),
+      };
+    }));
+    if (project?.id) withRetry(() => window.SB_DATA.removeScenePhoto(project.id, id, photo));
+  }
   // Retries a one-off scene write (delete/duplicate/reorder/comment) with
   // backoff until it succeeds, same as scheduleScenePatch — a save that only
   // gets one attempt can be silently lost to a single dropped connection.
@@ -425,12 +456,13 @@ function App() {
       group: null,
       photoHint: p.photoHint || PH_HINTS[i % PH_HINTS.length],
       notes: p.notes || "",
+      sceneInfo: p.sceneInfo || "",
       comments: [],
       shootDay: maxDay + 1,
       shootIndex: maxIdx + 1 + i,
     }));
     setScenes(prev => [...prev, ...newScenes]);
-    if (project?.id) window.SB_DATA.appendScenes(project.id, newScenes).catch(err => { console.error("Save imported scenes failed", err); setSaveState("error"); });
+    if (project?.id) withRetry(() => window.SB_DATA.appendScenes(project.id, newScenes));
     // generate new suggestions based on slug similarity
     const slugRoot = s => s.split("—")[0].trim();
     const buckets = {};
@@ -635,13 +667,13 @@ function App() {
 
   function exportCSV(list) {
     const rows_ = list || scenes;
-    const header = ["Episode","Scene","INT/EXT","Day/Night","Location ID","Location","Address","Country","Status","Group","Script Day","Notes"];
+    const header = ["Episode","Scene","INT/EXT","Day/Night","Location ID","Location","Address","Country","Status","Group","Script Day","Notes","Scene Info"];
     const rows = rows_.map(s => {
       const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
       return [
         isFilm ? "" : ep?.n,
         s.scene, s.intExt, s.dn, s.locationId || "", s.slug, s.address, ep?.country,
-        STATUS[s.status]?.label || s.status, s.group || "", s.shootDay || "", s.notes || "",
+        STATUS[s.status]?.label || s.status, s.group || "", s.shootDay || "", s.notes || "", s.sceneInfo || "",
       ];
     });
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -1077,6 +1109,8 @@ function App() {
           isFilm={isFilm}
           onClose={() => setOpenSceneId(null)}
           onUpdate={patch => updateScene(openScene.id, patch)}
+          onAddPhoto={(photo, thumb, geo) => addScenePhoto(openScene.id, photo, thumb, geo)}
+          onRemovePhoto={photo => removeScenePhoto(openScene.id, photo)}
           onAddComment={c => addComment(openScene.id, c)}
           onCreateGroup={name => createGroup(name)}
           onDuplicate={() => { duplicateScene(openScene.id); setOpenSceneId(null); }}
