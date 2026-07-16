@@ -82,12 +82,18 @@ function App() {
   useEffect(() => {
     if (!project?.id) return;
     return window.SB_DATA.subscribeToProjectData(project.id, (row) => {
+      // A malformed/incomplete row (e.g. scenes came back null) should never
+      // blank out what's on screen — skip it rather than trusting it blindly.
+      if (!Array.isArray(row.scenes)) {
+        console.error("Ignoring realtime update with invalid scenes payload", row);
+        return;
+      }
       const json = JSON.stringify({ scenes: row.scenes, groupNames: row.group_names, suggestions: row.suggestions });
       if (json === lastSyncedRef.current) return; // echo of our own save
       lastSyncedRef.current = json;
       skipNextSaveRef.current = true; // applying it below shouldn't bounce straight back out as a save
       if (row.episodes) window.STORY.EPISODES = row.episodes;
-      setScenes(row.scenes || []);
+      setScenes(row.scenes);
       setGroupNames(row.group_names || []);
       setSuggestions(row.suggestions || []);
     });

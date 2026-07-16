@@ -88,8 +88,12 @@
     if (error) throw error;
   }
   async function getProjectData(projectId) {
+    // Throws (rather than swallowing) on a real fetch error, so the caller can
+    // tell "no row yet" (data === null, error === null — a brand-new project)
+    // apart from "the fetch failed" — treating the latter as empty data would
+    // wipe out an existing project's scenes the moment autosave next fires.
     const { data, error } = await sb.from("project_data").select("*").eq("project_id", projectId).maybeSingle();
-    if (error) { console.error("[SB_DATA] getProjectData", error); return null; }
+    if (error) throw error;
     return data;
   }
   async function saveProjectData(projectId, bundle) {
