@@ -564,9 +564,27 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
 function ShareModal({ scope, scenes = [], isFilm, onClose, onToast }) {
   const [perm, setPerm] = useState("comment");
   const isGroup = scope?.type === "group";
-  const slug = isGroup ? scope.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "camino-s1";
-  const url = `https://storyboard.app/p/${slug}-9f3a7c`;
   const projectId = window.STORY.PROJECT?.id;
+
+  // A real, live link — it always resolves against the *current* scenes in
+  // Supabase (see get_shared_scenes), so it never goes stale like a snapshot would.
+  const [url, setUrl] = useState(null);
+  const [urlLoading, setUrlLoading] = useState(true);
+  useEffect(() => {
+    if (!projectId) { setUrlLoading(false); return; }
+    setUrlLoading(true);
+    window.SB_DATA.createShare(projectId, {
+      scopeType: isGroup ? "group" : "all",
+      scopeName: isGroup ? scope.name : null,
+      permission: perm,
+    }).then(share => {
+      setUrl(`${window.location.origin}/share.html?s=${share.id}`);
+      setUrlLoading(false);
+    }).catch(err => {
+      console.error("[ShareModal] createShare", err);
+      setUrlLoading(false);
+    });
+  }, [projectId, isGroup, scope?.name, perm]);
 
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
@@ -618,8 +636,9 @@ function ShareModal({ scope, scenes = [], isFilm, onClose, onToast }) {
   }
 
   function copy() {
+    if (!url) return;
     navigator.clipboard?.writeText(url).catch(()=>{});
-    onToast(`Link copied — ${pickedCount} scene${pickedCount!==1?"s":""} shared, comments allowed`);
+    onToast(`Link copied — always shows the current scenes`);
   }
   return (
     <div className="modal-bg" onClick={onClose}>
@@ -650,8 +669,8 @@ function ShareModal({ scope, scenes = [], isFilm, onClose, onToast }) {
           <div>
             <div className="section-h" style={{marginBottom:6}}>{isGroup ? "Group link" : "Public link"}</div>
             <div className="share-link">
-              <input readOnly value={url}/>
-              <button onClick={copy}><Icon name="copy" size={12}/> Copy</button>
+              <input readOnly value={urlLoading ? "Creating link…" : (url || "Couldn't create link")}/>
+              <button onClick={copy} disabled={!url}><Icon name="copy" size={12}/> Copy</button>
             </div>
           </div>
 

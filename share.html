@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Storyboard — Shared scenes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="icons/icon-192.png" type="image/png" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<style>
+  body { background: var(--bg); }
+  .share-top {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 28px; border-bottom: 1px solid var(--line); background: var(--bg-elev);
+  }
+  .share-top .logo {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: var(--ink); color: var(--bg-elev);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic; font-size: 16px;
+  }
+  .share-top .title { font-family: var(--serif); font-style: italic; font-size: 18px; }
+  .share-top .badge {
+    font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 10px;
+    background: var(--bg-sunk); color: var(--ink-2); border: 1px solid var(--line);
+  }
+  .share-wrap { max-width: 1400px; margin: 0 auto; padding: 28px; }
+  .share-head { margin-bottom: 20px; }
+  .share-head h1 { font-family: var(--serif); font-weight: 400; font-size: 30px; margin: 0 0 4px; }
+  .share-head p { margin: 0; color: var(--ink-3); font-size: 13px; }
+  .share-card {
+    background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .share-card .ph {
+    aspect-ratio: 16/9; background: var(--bg-sunk); position: relative;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-3); font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  }
+  .share-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+  .share-card .body { padding: 12px 13px; }
+  .share-card .name { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .share-card .ribbon { display: flex; gap: 6px; margin-bottom: 8px; }
+  .share-card .addr { font-size: 11.5px; color: var(--ink-3); margin-bottom: 6px; }
+  .share-card .notes { font-size: 12px; color: var(--ink-2); white-space: pre-line; line-height: 1.4; }
+  .state-msg { text-align: center; padding: 80px 20px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+  <div class="share-top">
+    <span class="logo">S</span>
+    <span class="title">Storyboard</span>
+    <div style="flex:1"></div>
+    <span id="permBadge" class="badge" style="display:none"></span>
+  </div>
+  <div class="share-wrap">
+    <div id="content"><div class="state-msg">Loading…</div></div>
+  </div>
+
+  <script>
+    (async function () {
+      const shareId = new URLSearchParams(location.search).get('s');
+      const content = document.getElementById('content');
+      if (!shareId) {
+        content.innerHTML = '<div class="state-msg">No share link provided.</div>';
+        return;
+      }
+      const result = await window.SB_DATA.getSharedScenes(shareId);
+      if (!result) {
+        content.innerHTML = '<div class="state-msg">This link is invalid or no longer available.</div>';
+        return;
+      }
+      document.title = 'Storyboard — ' + (result.project_name || 'Shared scenes');
+      const permBadge = document.getElementById('permBadge');
+      permBadge.textContent = result.permission === 'comment' ? 'Can comment' : 'Can view';
+      permBadge.style.display = 'inline-block';
+
+      const scenes = result.scenes || [];
+      const episodes = result.episodes || [];
+      const findEp = (id) => episodes.find(e => e.id === id);
+
+      const head = document.createElement('div');
+      head.className = 'share-head';
+      head.innerHTML = `<h1>${result.project_name || 'Shared scenes'}</h1><p>${scenes.length} scene${scenes.length !== 1 ? 's' : ''} shared with you</p>`;
+
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      grid.style.setProperty('--grid-cols', 4);
+
+      scenes.forEach(s => {
+        const ep = findEp(s.episode);
+        const card = document.createElement('div');
+        card.className = 'share-card';
+        const photo = (s.photoThumbs && s.photoThumbs[0]) || (s.photos && s.photos[0]);
+        card.innerHTML = `
+          ${photo ? `<img src="${photo}" alt="">` : `<div class="ph">${s.photoHint || ''}</div>`}
+          <div class="body">
+            <div class="name">${s.slug || ''}</div>
+            <div class="ribbon">
+              <span class="tag ${(s.intExt || '').toLowerCase().replace('+','')}">${s.intExt || ''}</span>
+              <span class="tag ${(s.dn || '').toLowerCase()}">${s.dn || ''}</span>
+            </div>
+            ${s.address ? `<div class="addr">${s.address}</div>` : ''}
+            ${s.notes ? `<div class="notes">${s.notes}</div>` : ''}
+          </div>`;
+        grid.appendChild(card);
+      });
+
+      content.innerHTML = '';
+      content.appendChild(head);
+      if (scenes.length) {
+        content.appendChild(grid);
+      } else {
+        const empty = document.createElement('div');
+        empty.className = 'state-msg';
+        empty.textContent = 'No scenes to show yet.';
+        content.appendChild(empty);
+      }
+    })();
+  </script>
+</body>
+</html>

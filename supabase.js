@@ -145,9 +145,35 @@
     }
   }
 
+  // ── Public share links — anyone with the id, no account needed. The link
+  // always resolves live against current project_data (see get_shared_scenes,
+  // a SECURITY DEFINER function), so edits show up next time it's opened —
+  // there's no snapshot to go stale. ──
+  function randomShareId() {
+    return Array.from(crypto.getRandomValues(new Uint8Array(8)))
+      .map((b) => b.toString(36)).join("").slice(0, 10);
+  }
+  async function createShare(projectId, { scopeType = "all", scopeName = null, permission = "view" } = {}) {
+    const session = await getSession();
+    const row = {
+      id: randomShareId(), project_id: projectId,
+      scope_type: scopeType, scope_name: scopeName, permission,
+      created_by: session?.user?.id || null,
+    };
+    const { data, error } = await sb.from("shares").insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+  async function getSharedScenes(shareId) {
+    const { data, error } = await sb.rpc("get_shared_scenes", { p_share_id: shareId });
+    if (error) { console.error("[SB_DATA] getSharedScenes", error); return null; }
+    return data && data[0] ? data[0] : null;
+  }
+
   window.SB_DATA = {
     listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
     subscribeToProjectData,
     listMembers, inviteMember, removeMember, sendInviteEmail,
+    createShare, getSharedScenes,
   };
 })();
