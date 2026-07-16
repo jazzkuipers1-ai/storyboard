@@ -50,6 +50,14 @@ function App() {
     return [...s];
   });
   const [saveState, setSaveState] = useState("saved"); // saved | saving | error
+  // sceneId -> { patch, timer, retryDelay } — edits not yet confirmed saved.
+  // Declared up here (not just down with the other mutators) so the realtime
+  // handler below can consult it: an incoming refetch can reflect server
+  // state from *before* this client's own not-yet-saved edit landed, and
+  // blindly applying it would visually revert that edit (e.g. a just-deleted
+  // photo reappearing) until the pending save completes and corrects it
+  // again — or forever, if that save had silently failed with no retry.
+  const scenePatchRef = useRef({});
 
   // ── Autosave + live sync ──────────────────────────────────
   // Scenes are NOT part of this: they're written server-side, one scene (or
@@ -100,8 +108,13 @@ function App() {
       skipNextSaveRef.current = true; // applying it below shouldn't bounce straight back out as a save
       if (row.episodes) window.STORY.EPISODES = row.episodes;
       // scenes always come from the server's merged state (see above), so
-      // this is the one true copy — always apply it, echo or not.
-      setScenes(row.scenes);
+      // this is the one true copy — always apply it, echo or not. Except:
+      // re-layer any of THIS client's own not-yet-confirmed edits on top,
+      // since the refetch can easily reflect a moment before they landed.
+      setScenes(row.scenes.map(s => {
+        const pending = scenePatchRef.current[s.id];
+        return pending ? { ...s, ...pending.patch } : s;
+      }));
       setGroupNames(row.group_names || []);
       setSuggestions(row.suggestions || []);
     });
@@ -216,7 +229,7 @@ function App() {
     setToast(`Group "${name}" deleted`);
     if (project?.id) {
       affectedIds.forEach(id => {
-        window.SB_DATA.mergeScenePatch(project.id, id, { group: null }).catch(err => console.error("Ungroup scene failed", err));
+        withRetry(() => window.SB_DATA.mergeScenePatch(project.id, id, { group: null }));
       });
     }
   }
@@ -226,35 +239,117 @@ function App() {
   // (merge/delete/append/duplicate/reorder — see supabase.js) instead of
   // saving this client's whole local `scenes` array, so two people editing
   // concurrently never wipe out each other's changes.
-  const scenePatchRef = useRef({}); // sceneId -> { patch, timer }
-  function scheduleScenePatch(id, patch) {
+  //
+  // A save that fails once (a flaky mobile connection dropping a request,
+  // say) used to just give up silently — the "Not saved" indicator was the
+  // only sign, and if you reloaded before noticing, that edit (a photo,
+  // often) was gone for good. Pending patches now retry with backoff until
+  // they land, and are mirrored to localStorage so a hard reload/crash can
+  // pick the save back up instead of losing it outright.
+  const pendingKey = project?.id ? `storyboard:pending:${project.id}` : null;
+
+  function persistPendingPatches() {
+    if (!pendingKey) return;
+    const store = {};
+    Object.entries(scenePatchRef.current).forEach(([id, entry]) => { store[id] = entry.patch; });
+    try {
+      if (Object.keys(store).length) localStorage.setItem(pendingKey, JSON.stringify(store));
+      else localStorage.removeItem(pendingKey);
+    } catch {}
+  }
+
+  function flushScenePatch(id) {
+    const entry = scenePatchRef.current[id];
+    if (!entry || !project?.id) return;
+    clearTimeout(entry.timer);
+    setSaveState("saving");
+    window.SB_DATA.mergeScenePatch(project.id, id, entry.patch).then(() => {
+      if (scenePatchRef.current[id] !== entry) return; // a newer edit queued while this was in flight
+      delete scenePatchRef.current[id];
+      persistPendingPatches();
+      if (!Object.keys(scenePatchRef.current).length) setSaveState("saved");
+    }).catch(err => {
+      console.error("Scene autosave failed, retrying", err);
+      setSaveState("error");
+      const retryDelay = Math.min((entry.retryDelay || 1500) * 2, 30000);
+      const timer = setTimeout(() => flushScenePatch(id), retryDelay);
+      scenePatchRef.current[id] = { ...entry, timer, retryDelay };
+    });
+  }
+
+  function scheduleScenePatch(id, patch, { immediate } = {}) {
     if (!project?.id) return;
     const pending = scenePatchRef.current[id];
     if (pending) clearTimeout(pending.timer);
     const mergedPatch = { ...(pending?.patch || {}), ...patch };
-    const timer = setTimeout(async () => {
-      delete scenePatchRef.current[id];
-      try {
-        await window.SB_DATA.mergeScenePatch(project.id, id, mergedPatch);
-      } catch (err) {
-        console.error("Scene autosave failed", err);
-        setSaveState("error");
-      }
-    }, 500);
-    scenePatchRef.current[id] = { patch: mergedPatch, timer };
+    const timer = setTimeout(() => flushScenePatch(id), immediate ? 0 : 500);
+    scenePatchRef.current[id] = { patch: mergedPatch, timer, retryDelay: 1500 };
+    persistPendingPatches();
   }
+
+  // Recover any edit that never made it to the server before a previous
+  // reload/crash (see persistPendingPatches above), and warn before leaving
+  // the page while a save is still in flight or retrying.
+  useEffect(() => {
+    if (!pendingKey) return;
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem(pendingKey) || "{}"); } catch {}
+    const ids = Object.keys(stored);
+    if (!ids.length) return;
+    setScenes(prev => prev.map(s => stored[s.id] ? { ...s, ...stored[s.id] } : s));
+    ids.forEach(id => {
+      scenePatchRef.current[id] = { patch: stored[id], timer: setTimeout(() => flushScenePatch(id), 0), retryDelay: 1500 };
+    });
+  }, [pendingKey]);
+
+  useEffect(() => {
+    function handleBeforeUnload(e) {
+      if (Object.keys(scenePatchRef.current).length || saveState !== "saved") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [saveState]);
 
   function updateScene(id, patch) {
     setScenes(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
-    scheduleScenePatch(id, patch);
+    // Photo edits are already a deliberate, complete action by the time this
+    // fires (not keystrokes to batch) — save them immediately rather than
+    // waiting out the debounce, so there's less to lose to a dropped
+    // connection or an impatient reload.
+    const isPhotoEdit = "photos" in patch || "photoThumbs" in patch || "photoGeo" in patch;
+    scheduleScenePatch(id, patch, { immediate: isPhotoEdit });
   }
+  // Retries a one-off scene write (delete/duplicate/reorder/comment) with
+  // backoff until it succeeds, same as scheduleScenePatch — a save that only
+  // gets one attempt can be silently lost to a single dropped connection.
+  function withRetry(fn) {
+    let delay = 1500;
+    function attempt() {
+      setSaveState("saving");
+      fn().then(() => setSaveState("saved")).catch(err => {
+        console.error("Save failed, retrying", err);
+        setSaveState("error");
+        setTimeout(attempt, delay);
+        delay = Math.min(delay * 2, 30000);
+      });
+    }
+    attempt();
+  }
+
   function deleteScene(id) {
     if (!window.confirm("Delete this scene? This can't be undone.")) return;
     setScenes(prev => prev.filter(s => s.id !== id));
     if (openSceneId === id) setOpenSceneId(null);
     setToast("Scene deleted");
-    delete scenePatchRef.current[id];
-    if (project?.id) window.SB_DATA.deleteSceneById(project.id, id).catch(err => { console.error("Delete scene failed", err); setSaveState("error"); });
+    if (scenePatchRef.current[id]) {
+      clearTimeout(scenePatchRef.current[id].timer);
+      delete scenePatchRef.current[id];
+      persistPendingPatches();
+    }
+    if (project?.id) withRetry(() => window.SB_DATA.deleteSceneById(project.id, id));
   }
   // These three compute the value they need to persist from the `scenes`
   // closure *before* calling setScenes, rather than inside the updater
@@ -275,7 +370,7 @@ function App() {
       return next;
     });
     setToast("Scene duplicated");
-    if (project?.id) window.SB_DATA.duplicateSceneAfter(project.id, id, copy).catch(err => { console.error("Duplicate scene failed", err); setSaveState("error"); });
+    if (project?.id) withRetry(() => window.SB_DATA.duplicateSceneAfter(project.id, id, copy));
   }
   function reorderScene(dragId, targetId) {
     if (dragId === targetId) return;
@@ -287,7 +382,7 @@ function App() {
     list.splice(to, 0, moved);
     const orderedIds = list.map(s => s.id);
     setScenes(list);
-    if (project?.id) window.SB_DATA.reorderScenes(project.id, orderedIds).catch(err => { console.error("Reorder scenes failed", err); setSaveState("error"); });
+    if (project?.id) withRetry(() => window.SB_DATA.reorderScenes(project.id, orderedIds));
   }
   function addComment(id, comment) {
     const target = scenes.find(s => s.id === id);
@@ -295,7 +390,7 @@ function App() {
     const nextComments = [...target.comments, comment];
     setScenes(prev => prev.map(s => s.id === id ? { ...s, comments: nextComments } : s));
     setToast("Comment added");
-    if (project?.id) window.SB_DATA.mergeScenePatch(project.id, id, { comments: nextComments }).catch(err => { console.error("Save comment failed", err); setSaveState("error"); });
+    if (project?.id) withRetry(() => window.SB_DATA.mergeScenePatch(project.id, id, { comments: nextComments }));
   }
   function acceptSuggestion(sug) {
     setScenes(prev => prev.map(s => sug.sceneIds.includes(s.id) ? { ...s, group: sug.name } : s));
@@ -304,7 +399,7 @@ function App() {
     setToast(`Group "${sug.name}" created with ${sug.sceneIds.length} scene${sug.sceneIds.length>1?"s":""}`);
     if (project?.id) {
       sug.sceneIds.forEach(id => {
-        window.SB_DATA.mergeScenePatch(project.id, id, { group: sug.name }).catch(err => console.error("Save group assignment failed", err));
+        withRetry(() => window.SB_DATA.mergeScenePatch(project.id, id, { group: sug.name }));
       });
     }
   }
