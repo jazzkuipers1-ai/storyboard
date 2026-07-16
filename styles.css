@@ -1482,7 +1482,7 @@ input, textarea { font-family: inherit; color: inherit; }
      everything at a fixed position so there's always a way back out. */
   .modal-close-mobile {
     display: inline-flex; align-items: center; justify-content: center;
-    position: fixed; top: 14px; right: 14px;
+    position: fixed; top: 56px; right: 14px;
     width: 34px; height: 34px; border-radius: 50%;
     border: 0; background: rgba(0,0,0,0.55); color: white;
     backdrop-filter: blur(4px);
