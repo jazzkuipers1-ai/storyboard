@@ -328,20 +328,29 @@
         photos: [],
         photoThumbs: [],
         notes: p.notes || '',
+        sceneInfo: p.sceneInfo || '',
         comments: [],
         shootDay: null,
         shootIndex: i,
       }));
     }
     function buildEpisodesFromScenes(scenes) {
+      // Numbered from the "epN" id itself (ep1 -> 101, ep2 -> 102, ...), not
+      // from which episode's scenes happen to appear first in the PDF — a
+      // chrono script's story order often isn't the same as episode order
+      // (a flashback into episode 2 can open the document), so numbering by
+      // first-appearance made the displayed "EP 10x" wrong/inconsistent.
       const ids = [...new Set(scenes.map(s => s.episode))];
-      return ids.map((id, i) => ({
-        id, n: 100 + i + 1,
-        title: EP_TITLES[id] || id,
-        country: (scenes.find(s => s.episode === id) || {}).country || EP_TITLES[id] || id,
-        era: '',
-        color: EP_COLORS[id] || PALETTE[i % PALETTE.length],
-      }));
+      return ids.map((id, i) => {
+        const num = parseInt(String(id).replace(/\D/g, ''), 10);
+        return {
+          id, n: 100 + (Number.isFinite(num) && num > 0 ? num : i + 1),
+          title: EP_TITLES[id] || id,
+          country: (scenes.find(s => s.episode === id) || {}).country || EP_TITLES[id] || id,
+          era: '',
+          color: EP_COLORS[id] || PALETTE[i % PALETTE.length],
+        };
+      });
     }
     function buildSuggestions(scenes) {
       const slugRoot = s => (s || '').split('—')[0].trim();

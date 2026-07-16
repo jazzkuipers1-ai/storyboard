@@ -1013,6 +1013,142 @@ function ExportModal({ scenes, isFilm, onClose, onExportCSV, onExportLocationsCS
   );
 }
 
+// ── Group builder — search scenes/location IDs, multi-select, assign to a
+// new or existing group in one action. Replaces the old flow (a bare
+// window.prompt for a name, no way to actually put scenes in it) where
+// "creating a group" made an empty label with nothing in it. ──────────
+function GroupBuilderModal({ scenes, groupNames, isFilm, initialGroup, onClose, onAssign }) {
+  const [search, setSearch] = useState("");
+  const [picked, setPicked] = useState({});
+  const [groupName, setGroupName] = useState(initialGroup || "");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return scenes;
+    return scenes.filter(s =>
+      (s.slug || "").toLowerCase().includes(q) ||
+      (s.locationId || "").toLowerCase().includes(q) ||
+      (s.address || "").toLowerCase().includes(q) ||
+      (s.group || "").toLowerCase().includes(q) ||
+      String(s.scene ?? "").toLowerCase().includes(q)
+    );
+  }, [scenes, search]);
+
+  const pickedCount = Object.values(picked).filter(Boolean).length;
+
+  function toggleAll(on) {
+    const o = { ...picked };
+    filtered.forEach(s => { o[s.id] = on; });
+    setPicked(o);
+  }
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal narrow" onClick={e => e.stopPropagation()} style={{flexDirection:"column"}}>
+        <div className="modal-head">
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{
+              width:28,height:28,borderRadius:7,
+              background:"var(--bg-sunk)",
+              display:"inline-flex",alignItems:"center",justifyContent:"center",
+            }}><Icon name="groups" size={14}/></span>
+            <div>
+              <div style={{fontSize:13,fontWeight:600}}>{initialGroup ? "Add scenes to group" : "Create group"}</div>
+              <div style={{fontSize:11.5,color:"var(--ink-3)"}}>Search scenes or location IDs, then merge them</div>
+            </div>
+          </div>
+          <button className="modal-x" onClick={onClose}><Icon name="close" size={14}/></button>
+        </div>
+
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14,overflowY:"auto"}}>
+          <div>
+            <div className="section-h" style={{marginBottom:6}}>Group name</div>
+            <input
+              type="text"
+              list="group-builder-names"
+              value={groupName}
+              onChange={e => setGroupName(e.target.value)}
+              placeholder="New group name, or pick an existing one…"
+              disabled={!!initialGroup}
+              style={{
+                width:"100%",border:"1px solid var(--line)",borderRadius:6,
+                padding:"7px 10px",fontSize:13,background: initialGroup ? "var(--bg-sunk)" : "var(--bg)",
+              }}
+            />
+            <datalist id="group-builder-names">
+              {groupNames.map(g => <option key={g} value={g}/>)}
+            </datalist>
+          </div>
+
+          <div>
+            <div className="section-h" style={{marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span>Scenes · {pickedCount} selected</span>
+              <span style={{display:"flex",gap:8}}>
+                <button className="btn ghost" style={{fontSize:11,padding:"3px 8px"}} onClick={() => toggleAll(true)}>Select all shown</button>
+                <button className="btn ghost" style={{fontSize:11,padding:"3px 8px"}} onClick={() => toggleAll(false)}>Clear</button>
+              </span>
+            </div>
+            <div className="search" style={{marginBottom:8}}>
+              <Icon name="search" size={13}/>
+              <input placeholder="Search by title, location ID, address…"
+                     value={search} onChange={e => setSearch(e.target.value)}/>
+            </div>
+            <div style={{
+              border:"1px solid var(--line)",borderRadius:8,
+              maxHeight:280,overflowY:"auto",background:"var(--bg-elev)",
+            }}>
+              {filtered.length === 0 && (
+                <div style={{padding:"16px 10px",fontSize:12.5,color:"var(--ink-3)",textAlign:"center"}}>No scenes match.</div>
+              )}
+              {filtered.map(s => {
+                const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
+                return (
+                  <label key={s.id} style={{
+                    display:"flex",alignItems:"center",gap:9,
+                    padding:"7px 10px",borderBottom:"1px solid var(--line-soft)",
+                    fontSize:12.5,cursor:"default",
+                  }}>
+                    <input type="checkbox" className="toggle"
+                           checked={!!picked[s.id]}
+                           onChange={e => setPicked({ ...picked, [s.id]: e.target.checked })}/>
+                    {s.locationId && (
+                      <span style={{fontFamily:"var(--mono)",fontSize:10.5,fontWeight:700,color:"var(--ink-3)",flexShrink:0}}>{s.locationId}</span>
+                    )}
+                    <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {s.slug}
+                    </span>
+                    {s.group && (
+                      <span style={{color:"var(--ink-3)",fontSize:11,flexShrink:0}}>{s.group}</span>
+                    )}
+                    <span style={{color:"var(--ink-3)",fontFamily:"var(--mono)",fontSize:11,flexShrink:0}}>
+                      {isFilm ? "" : `EP${ep?.n}·`}SC{s.scene}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          display:"flex",justifyContent:"flex-end",gap:8,
+          padding:"12px 20px",borderTop:"1px solid var(--line)",
+        }}>
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="btn primary"
+            disabled={!groupName.trim() || !pickedCount}
+            onClick={() => onAssign(Object.keys(picked).filter(id => picked[id]), groupName.trim())}
+          >
+            <Icon name="check" size={12}/>
+            {initialGroup ? `Add ${pickedCount} scene${pickedCount!==1?"s":""}` : `Create group with ${pickedCount} scene${pickedCount!==1?"s":""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Print / PDF Modal ──────────────────────────────────────
 function PrintModal({ scenes, isFilm, perPage, onSetPerPage, computePrintPages, onClose, onPrint }) {
   const { pages, perPage: resolvedPerPage } = computePrintPages(scenes, perPage);
@@ -1110,4 +1246,4 @@ function PrintModal({ scenes, isFilm, perPage, onSetPerPage, computePrintPages, 
   );
 }
 
-Object.assign(window, { SceneDetail, ImportModal, ShareModal, PrintModal, ExportModal });
+Object.assign(window, { SceneDetail, ImportModal, ShareModal, PrintModal, ExportModal, GroupBuilderModal });

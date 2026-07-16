@@ -136,6 +136,7 @@ function App() {
   const [showShare, setShowShare] = useState(false);
   const [shareScope, setShareScope] = useState(null); // null = whole storyboard, or { type:"group", name }
   const [showExport, setShowExport] = useState(false);
+  const [groupBuilder, setGroupBuilder] = useState(null); // null | { initialGroup: string|null }
   const [showPrint, setShowPrint] = useState(false);
   const [printScenes, setPrintScenes] = useState(null); // subset picked in ExportModal, or null = all
   const [printPerPage, setPrintPerPage] = useState("smart"); // smart | 4 | 6 | 9
@@ -216,11 +217,20 @@ function App() {
     setToast(`Group "${clean}" created`);
     return clean;
   }
-  function promptNewGroup(assignSceneId) {
-    const name = window.prompt("New location group name:");
-    if (!name || !name.trim()) return;
-    const clean = createGroup(name);
-    if (assignSceneId && clean) updateScene(assignSceneId, { group: clean });
+  // Bulk-assigns a search-and-select list of scenes to a group in one action
+  // (see GroupBuilderModal) — the old flow only ever prompted for a group
+  // *name* with no way to actually put scenes in it, so "creating a group"
+  // just made an empty, unassigned label.
+  function assignScenesToGroup(sceneIds, groupName) {
+    setScenes(prev => prev.map(s => sceneIds.includes(s.id) ? { ...s, group: groupName } : s));
+    setGroupNames(prev => prev.includes(groupName) ? prev : [...prev, groupName]);
+    setToast(`${sceneIds.length} scene${sceneIds.length !== 1 ? "s" : ""} added to "${groupName}"`);
+    setGroupBuilder(null);
+    if (project?.id) {
+      sceneIds.forEach(id => {
+        withRetry(() => window.SB_DATA.mergeScenePatch(project.id, id, { group: groupName }));
+      });
+    }
   }
   function deleteGroup(name) {
     if (!window.confirm(`Delete group "${name}"? Scenes stay, they'll just be ungrouped.`)) return;
@@ -535,7 +545,7 @@ function App() {
         <div className="side-section">
           <div className="side-h">
             <span>Location groups</span>
-            <button className="add" title="New group" onClick={() => promptNewGroup()}><Icon name="plus" size={12}/></button>
+            <button className="add" title="New group" onClick={() => setGroupBuilder({ initialGroup: null })}><Icon name="plus" size={12}/></button>
           </div>
           {groupsList.map(g => (
             <SideItem key={g.name}
@@ -841,7 +851,7 @@ function App() {
         <div>
           <div className="section-h" style={{margin:"6px 0 8px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span>Location groups · {groupsList.length}</span>
-            <button className="btn ghost" style={{fontSize:11.5}} onClick={() => promptNewGroup()}><Icon name="plus" size={12}/>New group</button>
+            <button className="btn ghost" style={{fontSize:11.5}} onClick={() => setGroupBuilder({ initialGroup: null })}><Icon name="plus" size={12}/>New group</button>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             {groupsList.map(g => {
@@ -863,6 +873,13 @@ function App() {
                     <button
                       className="btn ghost"
                       style={{fontSize:11.5,marginLeft:10}}
+                      onClick={() => setGroupBuilder({ initialGroup: g.name })}
+                    >
+                      <Icon name="plus" size={12}/>Add scenes
+                    </button>
+                    <button
+                      className="btn ghost"
+                      style={{fontSize:11.5}}
                       onClick={() => { setShareScope({ type: "group", name: g.name, count: g.items.length }); setShowShare(true); }}
                     >
                       <Icon name="share" size={12}/>Share group
@@ -1134,6 +1151,16 @@ function App() {
           onExportCSV={(list) => { exportCSV(list); setShowExport(false); }}
           onExportLocationsCSV={(list) => { exportLocationsCSV(list); setShowExport(false); }}
           onExportPDF={(list) => { setShowExport(false); exportPDF(list); }}
+        />
+      )}
+      {groupBuilder && (
+        <GroupBuilderModal
+          scenes={scenes}
+          groupNames={groupNames}
+          isFilm={isFilm}
+          initialGroup={groupBuilder.initialGroup}
+          onClose={() => setGroupBuilder(null)}
+          onAssign={assignScenesToGroup}
         />
       )}
       {showPrint && (
