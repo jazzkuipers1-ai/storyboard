@@ -321,30 +321,27 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
             <div>
               <div className="section-h">Comments · {scene.comments.length}</div>
               <div className="comments">
-                {scene.comments.map((c,i) => {
-                  const t = window.STORY.TEAM.find(x => x.id === c.user);
-                  return (
-                    <div className="comment" key={i}>
-                      <Avatar user={c.user} size={26}/>
-                      <div className="body">
-                        <div className="top">
-                          <span className="name">{t?.name || "Guest"}</span>
-                          <span className="ts">{c.ts} ago</span>
-                        </div>
-                        <div className="text">{c.text}</div>
+                {scene.comments.map((c,i) => (
+                  <div className="comment" key={i}>
+                    <Avatar user={c.user} size={26}/>
+                    <div className="body">
+                      <div className="top">
+                        <span className="name">{c.user || "Guest"}</span>
+                        <span className="ts">{c.ts} ago</span>
                       </div>
+                      <div className="text">{c.text}</div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
                 <div className="comment-input">
-                  <Avatar user="mw" size={26}/>
+                  <Avatar user={sessionStorage.getItem("sb_user_email")} size={26}/>
                   <input
                     placeholder="Add a comment…"
                     value={newComment}
                     onChange={e => setNewComment(e.target.value)}
                     onKeyDown={e => {
                       if (e.key === "Enter" && newComment.trim()) {
-                        onAddComment({ user: "mw", text: newComment.trim(), ts: "now" });
+                        onAddComment({ user: sessionStorage.getItem("sb_user_email") || "Guest", text: newComment.trim(), ts: "now" });
                         setNewComment("");
                       }
                     }}

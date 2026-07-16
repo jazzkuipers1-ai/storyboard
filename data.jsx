@@ -45,15 +45,6 @@ const PH = {
   Germany:       ["oklch(0.72 0.03 100)", "oklch(0.66 0.04 110)"],
 };
 
-// avatar palette for collaborators
-const TEAM = [
-  { id: "mw", name: "Mira Weiss",     color: "#D97757", role: "Director" },
-  { id: "jb", name: "Jens Bakker",    color: "#3C6EB4", role: "Location scout" },
-  { id: "sk", name: "Sofija Kalin",   color: "#2A6F3C", role: "1st AD" },
-  { id: "lh", name: "Lukas Hartmann", color: "#8B5A3C", role: "DP" },
-  { id: "an", name: "Anouk Vermeer",  color: "#7A5AE0", role: "Producer" },
-];
-
 // All scenes
 let _id = 0;
 const sc = (ep, num, intExt, dn, slug, address, status, group, photoHint, notes, comments=[]) => ({
@@ -184,7 +175,7 @@ SHOOT_ORDER.forEach(([ep, num, day], i) => {
   if (s) { s.shootDay = day; s.shootIndex = i; }
 });
 
-window.STORY = { EPISODES, SCENES, SUGGESTIONS, TEAM, PH, FLAG_FR, FLAG_YU, FLAG_NL, FLAG_DE };
+window.STORY = { EPISODES, SCENES, SUGGESTIONS, PH, FLAG_FR, FLAG_YU, FLAG_NL, FLAG_DE };
 
 // Project-scoped boot: swap the seed ("The Camino") data for the signed-in
 // user's own project (fetched from Supabase, RLS-scoped to their account —

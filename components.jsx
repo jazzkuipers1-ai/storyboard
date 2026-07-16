@@ -78,13 +78,19 @@ function StatusBadge({ status }) {
 }
 
 // ── Avatar ─────────────────────────────────────────────────
+// Derived straight from a real email/name — there's no separate team roster,
+// so anyone with project access shows up correctly without being registered anywhere.
 function Avatar({ user, size=24 }) {
-  const team = window.STORY.TEAM.find(t => t.id === user);
-  const initials = team ? team.name.split(" ").map(s => s[0]).join("").slice(0,2) : "??";
+  const label = user || "";
+  const initials = (label.split("@")[0].match(/[a-z0-9]+/gi) || [])
+    .map(s => s[0]).join("").slice(0, 2).toUpperCase() || "?";
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) hash = label.charCodeAt(i) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
   return (
     <span className="av" style={{
       width: size, height: size,
-      background: team?.color || "#888",
+      background: `hsl(${hue}, 45%, 55%)`,
       fontSize: size * 0.42,
     }}>{initials}</span>
   );

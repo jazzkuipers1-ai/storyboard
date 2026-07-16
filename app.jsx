@@ -877,13 +877,10 @@ function App() {
 
         <div className="spacer"></div>
 
-        <div className="avatar-stack">
-          {window.STORY.TEAM.slice(0,4).map(t => (
-            <span key={t.id} className="av" style={{background: t.color}}>
-              {t.name.split(" ").map(n => n[0]).join("").slice(0,2)}
-            </span>
-          ))}
-        </div>
+        <a href="dashboard.html" className="btn" title="Back to all projects">
+          <span style={{display:"inline-flex",transform:"scaleX(-1)"}}><Icon name="chevR" size={13}/></span>
+          <span className="label-text">Projects</span>
+        </a>
 
         <button className="btn" onClick={() => setShowImport(true)}>
           <Icon name="upload" size={13}/><span className="label-text">Import PDF</span>
