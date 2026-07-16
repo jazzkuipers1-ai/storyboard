@@ -52,22 +52,30 @@ function App() {
   const [saveState, setSaveState] = useState("saved"); // saved | saving | error
 
   // ── Autosave + live sync ──────────────────────────────────
-  // Every edit (photos, notes, status, groups, ...) is debounced and written
-  // straight to Supabase, so it survives a refresh and shows up on any other
-  // device or collaborator signed into this project. A Realtime subscription
-  // does the reverse: picks up their edits and merges them in here.
+  // Scenes are NOT part of this: they're written server-side, one scene (or
+  // one operation) at a time, via mergeScenePatch/deleteSceneById/etc (see
+  // the mutators below) — each is an atomic UPDATE scoped to just the
+  // scene(s) touched. The old approach had every client debounce-upsert its
+  // *entire* local scenes array, so two people editing at the same time (even
+  // completely different scenes) would race: whoever's save landed last won,
+  // silently erasing the other person's change — e.g. an uploaded photo
+  // vanishing because a collaborator's save fired moments later from a local
+  // copy that didn't have it yet. group_names/suggestions are edited far
+  // less often and not per-scene, so they keep the simpler debounced-upsert
+  // path (and the upsert payload below omits `scenes` entirely, so it never
+  // touches — or stomps on — that column).
   const skipNextSaveRef = useRef(true); // the very first render is just the data we loaded, not a new edit
-  const lastSyncedRef = useRef(JSON.stringify({ scenes, groupNames, suggestions }));
+  const lastSyncedRef = useRef(JSON.stringify({ groupNames, suggestions }));
   useEffect(() => {
     if (!project?.id) return;
     if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
-    const json = JSON.stringify({ scenes, groupNames, suggestions });
+    const json = JSON.stringify({ groupNames, suggestions });
     if (json === lastSyncedRef.current) return; // this state just arrived *from* the server via realtime
     setSaveState("saving");
     const timer = setTimeout(async () => {
       try {
         await window.SB_DATA.saveProjectData(project.id, {
-          scenes, episodes: window.STORY.EPISODES, group_names: groupNames, suggestions,
+          episodes: window.STORY.EPISODES, group_names: groupNames, suggestions,
         });
         lastSyncedRef.current = json;
         setSaveState("saved");
@@ -77,7 +85,7 @@ function App() {
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [scenes, groupNames, suggestions]);
+  }, [groupNames, suggestions]);
 
   useEffect(() => {
     if (!project?.id) return;
@@ -88,11 +96,11 @@ function App() {
         console.error("Ignoring realtime update with invalid scenes payload", row);
         return;
       }
-      const json = JSON.stringify({ scenes: row.scenes, groupNames: row.group_names, suggestions: row.suggestions });
-      if (json === lastSyncedRef.current) return; // echo of our own save
-      lastSyncedRef.current = json;
+      lastSyncedRef.current = JSON.stringify({ groupNames: row.group_names, suggestions: row.suggestions });
       skipNextSaveRef.current = true; // applying it below shouldn't bounce straight back out as a save
       if (row.episodes) window.STORY.EPISODES = row.episodes;
+      // scenes always come from the server's merged state (see above), so
+      // this is the one true copy — always apply it, echo or not.
       setScenes(row.scenes);
       setGroupNames(row.group_names || []);
       setSuggestions(row.suggestions || []);
@@ -194,37 +202,71 @@ function App() {
   }
   function deleteGroup(name) {
     if (!window.confirm(`Delete group "${name}"? Scenes stay, they'll just be ungrouped.`)) return;
+    const affectedIds = scenes.filter(s => s.group === name).map(s => s.id);
     setScenes(prev => prev.map(s => s.group === name ? { ...s, group: null } : s));
     setGroupNames(prev => prev.filter(g => g !== name));
     if (filter.kind === "group" && filter.value === name) setFilter({ kind: "all" });
     setToast(`Group "${name}" deleted`);
+    if (project?.id) {
+      affectedIds.forEach(id => {
+        window.SB_DATA.mergeScenePatch(project.id, id, { group: null }).catch(err => console.error("Ungroup scene failed", err));
+      });
+    }
   }
 
   // ── Mutators ───────────────────────────────────────────
+  // Each scene write below lands via a targeted, atomic server-side RPC
+  // (merge/delete/append/duplicate/reorder — see supabase.js) instead of
+  // saving this client's whole local `scenes` array, so two people editing
+  // concurrently never wipe out each other's changes.
+  const scenePatchRef = useRef({}); // sceneId -> { patch, timer }
+  function scheduleScenePatch(id, patch) {
+    if (!project?.id) return;
+    const pending = scenePatchRef.current[id];
+    if (pending) clearTimeout(pending.timer);
+    const mergedPatch = { ...(pending?.patch || {}), ...patch };
+    const timer = setTimeout(async () => {
+      delete scenePatchRef.current[id];
+      try {
+        await window.SB_DATA.mergeScenePatch(project.id, id, mergedPatch);
+      } catch (err) {
+        console.error("Scene autosave failed", err);
+        setSaveState("error");
+      }
+    }, 500);
+    scenePatchRef.current[id] = { patch: mergedPatch, timer };
+  }
+
   function updateScene(id, patch) {
     setScenes(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
     if (openScene?.id === id) setOpenScene(prev => ({ ...prev, ...patch }));
+    scheduleScenePatch(id, patch);
   }
   function deleteScene(id) {
     if (!window.confirm("Delete this scene? This can't be undone.")) return;
     setScenes(prev => prev.filter(s => s.id !== id));
     if (openScene?.id === id) setOpenScene(null);
     setToast("Scene deleted");
+    delete scenePatchRef.current[id];
+    if (project?.id) window.SB_DATA.deleteSceneById(project.id, id).catch(err => { console.error("Delete scene failed", err); setSaveState("error"); });
   }
   function duplicateScene(id) {
+    let copy = null;
     setScenes(prev => {
       const idx = prev.findIndex(s => s.id === id);
       if (idx === -1) return prev;
       const src = prev[idx];
-      const copy = { ...src, id: `dup${Date.now()}${Math.random().toString(36).slice(2,6)}`, comments: [...src.comments] };
+      copy = { ...src, id: `dup${Date.now()}${Math.random().toString(36).slice(2,6)}`, comments: [...src.comments] };
       const next = [...prev];
       next.splice(idx + 1, 0, copy);
       return next;
     });
     setToast("Scene duplicated");
+    if (copy && project?.id) window.SB_DATA.duplicateSceneAfter(project.id, id, copy).catch(err => { console.error("Duplicate scene failed", err); setSaveState("error"); });
   }
   function reorderScene(dragId, targetId) {
     if (dragId === targetId) return;
+    let orderedIds = null;
     setScenes(prev => {
       const list = [...prev];
       const from = list.findIndex(s => s.id === dragId);
@@ -232,23 +274,34 @@ function App() {
       if (from === -1 || to === -1) return prev;
       const [moved] = list.splice(from, 1);
       list.splice(to, 0, moved);
+      orderedIds = list.map(s => s.id);
       return list;
     });
+    if (orderedIds && project?.id) window.SB_DATA.reorderScenes(project.id, orderedIds).catch(err => { console.error("Reorder scenes failed", err); setSaveState("error"); });
   }
   function addComment(id, comment) {
-    setScenes(prev => prev.map(s => s.id === id
-      ? { ...s, comments: [...s.comments, comment] }
-      : s));
+    let nextComments = null;
+    setScenes(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      nextComments = [...s.comments, comment];
+      return { ...s, comments: nextComments };
+    }));
     if (openScene?.id === id) {
       setOpenScene(prev => ({ ...prev, comments: [...prev.comments, comment] }));
     }
     setToast("Comment added");
+    if (nextComments && project?.id) window.SB_DATA.mergeScenePatch(project.id, id, { comments: nextComments }).catch(err => { console.error("Save comment failed", err); setSaveState("error"); });
   }
   function acceptSuggestion(sug) {
     setScenes(prev => prev.map(s => sug.sceneIds.includes(s.id) ? { ...s, group: sug.name } : s));
     setGroupNames(prev => prev.includes(sug.name) ? prev : [...prev, sug.name]);
     setSuggestions(prev => prev.filter(x => x.id !== sug.id));
     setToast(`Group "${sug.name}" created with ${sug.sceneIds.length} scene${sug.sceneIds.length>1?"s":""}`);
+    if (project?.id) {
+      sug.sceneIds.forEach(id => {
+        window.SB_DATA.mergeScenePatch(project.id, id, { group: sug.name }).catch(err => console.error("Save group assignment failed", err));
+      });
+    }
   }
   function dismissSuggestion(sug) {
     setSuggestions(prev => prev.filter(x => x.id !== sug.id));
@@ -275,6 +328,7 @@ function App() {
       shootIndex: maxIdx + 1 + i,
     }));
     setScenes(prev => [...prev, ...newScenes]);
+    if (project?.id) window.SB_DATA.appendScenes(project.id, newScenes).catch(err => { console.error("Save imported scenes failed", err); setSaveState("error"); });
     // generate new suggestions based on slug similarity
     const slugRoot = s => s.split("—")[0].trim();
     const buckets = {};

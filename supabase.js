@@ -101,6 +101,30 @@
     const { error } = await sb.from("project_data").upsert(row, { onConflict: "project_id" });
     if (error) throw error;
   }
+  // ── Granular scene writes — each merges/inserts/removes server-side inside
+  // one atomic UPDATE, instead of a client upserting its whole local `scenes`
+  // array (which is how two people editing at once used to erase each
+  // other's changes — see the migration comment in merge_scene_patch). ──
+  async function mergeScenePatch(projectId, sceneId, patch) {
+    const { error } = await sb.rpc("merge_scene_patch", { p_project_id: projectId, p_scene_id: sceneId, p_patch: patch });
+    if (error) throw error;
+  }
+  async function deleteSceneById(projectId, sceneId) {
+    const { error } = await sb.rpc("delete_scene_by_id", { p_project_id: projectId, p_scene_id: sceneId });
+    if (error) throw error;
+  }
+  async function appendScenes(projectId, newScenes) {
+    const { error } = await sb.rpc("append_scenes", { p_project_id: projectId, p_new_scenes: newScenes });
+    if (error) throw error;
+  }
+  async function duplicateSceneAfter(projectId, sourceSceneId, newScene) {
+    const { error } = await sb.rpc("duplicate_scene_after", { p_project_id: projectId, p_source_scene_id: sourceSceneId, p_new_scene: newScene });
+    if (error) throw error;
+  }
+  async function reorderScenes(projectId, orderedIds) {
+    const { error } = await sb.rpc("reorder_scenes", { p_project_id: projectId, p_ordered_ids: orderedIds });
+    if (error) throw error;
+  }
   // Live sync: fires on any change to this project's data, from any device or
   // collaborator (Realtime is enabled on the project_data table). Returns an
   // unsubscribe function.
@@ -186,6 +210,7 @@
   window.SB_DATA = {
     listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
     subscribeToProjectData,
+    mergeScenePatch, deleteSceneById, appendScenes, duplicateSceneAfter, reorderScenes,
     listMembers, inviteMember, removeMember, sendInviteEmail,
     createShare, getSharedScenes, addSharedComment,
   };
