@@ -833,7 +833,12 @@ function App() {
   }
 
   // ── Render ─────────────────────────────────────────────
+  // PrintSheets has to live outside .app: @media print hides .app entirely
+  // (so the on-screen UI doesn't show up in the printout), and a display:none
+  // ancestor hides its descendants regardless of their own display value —
+  // so nesting PrintSheets inside .app meant "Print" always produced a blank page.
   return (
+    <>
     <div className={"app" + (navOpen ? " nav-open" : "")}>
       <header className="topbar">
         <button className="hamburger-btn" title="Menu" onClick={() => setNavOpen(v => !v)}>
@@ -956,8 +961,6 @@ function App() {
 
       {toast && <div className="toast">{toast}</div>}
 
-      <PrintSheets scenes={printScenes || scenes} isFilm={isFilm} perPage={printPerPage} computePrintPages={computePrintPages}/>
-
       <TweaksPanel title="Tweaks">
         <TweakSection label="Aesthetic"/>
         <TweakRadio label="Production type" value={t.productionType}
@@ -995,6 +998,8 @@ function App() {
         </TweakButton>
       </TweaksPanel>
     </div>
+    <PrintSheets scenes={printScenes || scenes} isFilm={isFilm} perPage={printPerPage} computePrintPages={computePrintPages} projectName={project?.name}/>
+    </>
   );
 }
 

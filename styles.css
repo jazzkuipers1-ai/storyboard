@@ -1424,6 +1424,12 @@ input, textarea { font-family: inherit; color: inherit; }
   background: #fff;
 }
 .print-page:last-child { page-break-after: auto; }
+/* "2 per page" prints landscape — named page + matching sheet dimensions so
+   both the on-screen preview sizing and the browser's print/PDF output
+   actually use A4 landscape instead of being squeezed into portrait. */
+@page { size: A4 portrait; margin: 0; }
+@page landscape { size: A4 landscape; margin: 0; }
+.print-page.landscape { width: 297mm; min-height: 210mm; }
 .print-page-head {
   display: flex; align-items: flex-end; justify-content: space-between;
   border-bottom: 1.5px solid #1B1A17;
@@ -1438,8 +1444,13 @@ input, textarea { font-family: inherit; color: inherit; }
   grid-template-columns: repeat(var(--pcols, 2), 1fr);
   gap: 8mm 6mm;
 }
-.print-card { break-inside: avoid; border: 1px solid #D8D5CC; border-radius: 6px; overflow: hidden; }
+.print-card { break-inside: avoid; border: 1.5px solid #1B1A17; border-radius: 4px; overflow: hidden; }
+.print-card-label {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  padding: 3mm 4mm; border-bottom: 1.5px solid #1B1A17; background: #F4F1E9;
+}
 .print-img { aspect-ratio: 16/9; background: #eee; overflow: hidden; }
+.print-page.landscape .print-img { aspect-ratio: 16/10; }
 .print-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .print-meta { padding: 3mm 4mm 4mm; }
 .print-ribbon { display: flex; align-items: center; gap: 5px; margin-bottom: 2mm; }

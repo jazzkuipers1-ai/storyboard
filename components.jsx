@@ -297,19 +297,20 @@ function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onD
 }
 
 // ── Print sheets (A4, hidden on screen, shown via @media print) ─
-function PrintSheets({ scenes, isFilm, perPage, computePrintPages }) {
-  const { pages } = computePrintPages(scenes, perPage);
+function PrintSheets({ scenes, isFilm, perPage, computePrintPages, projectName }) {
+  const { pages, perPage: resolvedPerPage } = computePrintPages(scenes, perPage);
+  const landscape = Number(resolvedPerPage) === 2;
   return (
     <div className="print-sheets">
       {pages.map((page, pi) => {
         const groups = [...new Set(page.map(p => p.group))];
         const label = groups.length === 1 && groups[0] ? groups[0] : "Mixed scenes";
-        const cols = page.length > 6 ? 3 : 2;
+        const cols = landscape ? page.length : page.length > 6 ? 3 : 2;
         return (
-          <div className="print-page" key={pi}>
+          <div className={"print-page" + (landscape ? " landscape" : "")} key={pi} style={landscape ? { page: "landscape" } : undefined}>
             <div className="print-page-head">
               <div>
-                <div className="pp-title">The Camino</div>
+                <div className="pp-title">{projectName || "Storyboard"}</div>
                 <div className="pp-sub">{label}</div>
               </div>
               <div className="pp-page-no">Page {pi + 1} / {pages.length}</div>
@@ -319,6 +320,9 @@ function PrintSheets({ scenes, isFilm, perPage, computePrintPages }) {
                 const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
                 return (
                   <div className="print-card" key={s.id}>
+                    <div className="print-card-label">
+                      SCENE {!isFilm && ep ? `${ep.n} · ` : ""}{String(s.scene).padStart(2,"0")}
+                    </div>
                     <div className="print-img">
                       {s.photos && s.photos.length ? (
                         <img src={s.photos[0]} alt=""/>
@@ -330,9 +334,6 @@ function PrintSheets({ scenes, isFilm, perPage, computePrintPages }) {
                       <div className="print-ribbon">
                         <span className={`tag ${tagCls(s.intExt)}`}>{s.intExt}</span>
                         <span className={`tag ${tagCls(s.dn)}`}>{s.dn}</span>
-                        <span style={{marginLeft:"auto",fontFamily:"var(--mono)",fontSize:10}}>
-                          {!isFilm && `EP ${ep?.n} · `}SC {String(s.scene).padStart(2,"0")}
-                        </span>
                       </div>
                       <div className="print-name">{s.slug}</div>
                       <div className="print-addr">{s.address}</div>

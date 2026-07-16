@@ -947,7 +947,9 @@ function PrintModal({ scenes, isFilm, perPage, onSetPerPage, computePrintPages, 
             }}><Icon name="file" size={14}/></span>
             <div>
               <div style={{fontSize:13,fontWeight:600}}>Print storyboard</div>
-              <div style={{fontSize:11.5,color:"var(--ink-3)"}}>{scenes.length} scenes · A4 portrait</div>
+              <div style={{fontSize:11.5,color:"var(--ink-3)"}}>
+                {scenes.length} scenes · A4 {Number(resolvedPerPage) === 2 ? "landscape" : "portrait"}
+              </div>
             </div>
           </div>
           <button className="modal-x" onClick={onClose}><Icon name="close" size={14}/></button>
@@ -959,6 +961,7 @@ function PrintModal({ scenes, isFilm, perPage, onSetPerPage, computePrintPages, 
             <div className="type-pick-row">
               {[
                 { v: "smart", label: "Smart" },
+                { v: "2", label: "2 · Landscape" },
                 { v: "4", label: "4 · Large" },
                 { v: "6", label: "6 · Standard" },
                 { v: "9", label: "9 · Compact" },
