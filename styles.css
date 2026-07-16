@@ -1437,15 +1437,25 @@ input, textarea { font-family: inherit; color: inherit; }
   .print-sheets { display: block !important; }
 }
 .print-sheets { display: none; }
+/* Fixed (not min-) height + a flex/grid chain all the way down to the notes
+   text, which clamps instead of growing — every card's height is a fixed
+   fraction of one physical page no matter how much photo/notes content it
+   holds, so a page can never spill content onto a stray, unnumbered
+   continuation sheet (which is what "doesn't fit the page" looked like:
+   the address/notes at the bottom of a card silently pushed past the sheet
+   boundary and never printed at all). */
 .print-page {
   width: 210mm;
-  min-height: 297mm;
+  height: 297mm;
   padding: 14mm 12mm;
   box-sizing: border-box;
   page-break-after: always;
   font-family: var(--sans);
   color: #1B1A17;
   background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .print-page:last-child { page-break-after: auto; }
 /* "2 per page" prints landscape — named page + matching sheet dimensions so
@@ -1453,12 +1463,13 @@ input, textarea { font-family: inherit; color: inherit; }
    actually use A4 landscape instead of being squeezed into portrait. */
 @page { size: A4 portrait; margin: 0; }
 @page landscape { size: A4 landscape; margin: 0; }
-.print-page.landscape { width: 297mm; min-height: 210mm; }
+.print-page.landscape { width: 297mm; height: 210mm; }
 .print-page-head {
   display: flex; align-items: flex-end; justify-content: space-between;
   border-bottom: 1.5px solid #1B1A17;
   padding-bottom: 8mm;
   margin-bottom: 8mm;
+  flex-shrink: 0;
 }
 .pp-title { font-family: var(--serif); font-style: italic; font-size: 20px; }
 .pp-sub { font-size: 12px; color: #55524A; margin-top: 2px; }
@@ -1466,21 +1477,34 @@ input, textarea { font-family: inherit; color: inherit; }
 .print-grid {
   display: grid;
   grid-template-columns: repeat(var(--pcols, 2), 1fr);
+  grid-auto-rows: 1fr;
   gap: 8mm 6mm;
+  flex: 1;
+  min-height: 0;
 }
-.print-card { break-inside: avoid; border: 1.5px solid #1B1A17; border-radius: 4px; overflow: hidden; }
+.print-card {
+  break-inside: avoid; border: 1.5px solid #1B1A17; border-radius: 4px; overflow: hidden;
+  display: flex; flex-direction: column; min-height: 0;
+}
 .print-card-label {
   font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
   padding: 3mm 4mm; border-bottom: 1.5px solid #1B1A17; background: #F4F1E9;
+  flex-shrink: 0;
 }
-.print-img { aspect-ratio: 16/9; background: #eee; overflow: hidden; }
-.print-page.landscape .print-img { aspect-ratio: 16/10; }
+/* Text (ID/title/address/notes) always wins the space fight — every field
+   the user asked to see on a card is fixed-height and never shrinks; only
+   the photo (flex:1, no minimum) gives way when a page is dense enough
+   that everything can't fit at a comfortable size. */
+.print-img { flex: 1 1 0; min-height: 12mm; background: #eee; overflow: hidden; }
 .print-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.print-meta { padding: 3mm 4mm 4mm; }
-.print-ribbon { display: flex; align-items: center; gap: 5px; margin-bottom: 2mm; }
-.print-name { font-size: 12.5px; font-weight: 700; margin-bottom: 1mm; }
-.print-addr { font-size: 10.5px; color: #55524A; }
-.print-notes { font-size: 10px; color: #33322D; margin-top: 1.5mm; line-height: 1.3; }
+.print-meta { flex-shrink: 0; padding: 3mm 4mm 4mm; display: flex; flex-direction: column; }
+.print-ribbon { display: flex; align-items: center; gap: 5px; margin-bottom: 2mm; flex-shrink: 0; }
+.print-name { font-size: 12.5px; font-weight: 700; margin-bottom: 1mm; flex-shrink: 0; }
+.print-addr { font-size: 10.5px; color: #55524A; flex-shrink: 0; }
+.print-notes {
+  font-size: 10px; color: #33322D; margin-top: 1.5mm; line-height: 1.3; flex-shrink: 0;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 
 /* ── Mobile / tablet shell (phones + iPad) ─────────────────── */
 @media (max-width: 860px) {

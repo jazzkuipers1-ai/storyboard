@@ -44,7 +44,8 @@
   .share-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
   .share-card .body { padding: 12px 13px; }
   .share-card .name { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
-  .share-card .ribbon { display: flex; gap: 6px; margin-bottom: 8px; }
+  .share-card .ribbon { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .share-card .scno { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
   .share-card .addr { font-size: 11.5px; color: var(--ink-3); margin-bottom: 6px; }
   .share-card .notes { font-size: 12px; color: var(--ink-2); white-space: pre-line; line-height: 1.4; }
   .state-msg { text-align: center; padding: 80px 20px; color: var(--ink-3); }
@@ -141,6 +142,7 @@
             <div class="ribbon">
               <span class="tag ${esc((s.intExt || '').toLowerCase().replace('+',''))}">${esc(s.intExt || '')}</span>
               <span class="tag ${esc((s.dn || '').toLowerCase())}">${esc(s.dn || '')}</span>
+              <span class="scno">${ep ? `EP ${esc(ep.n)} · ` : ''}SC ${esc(String(s.scene ?? '').padStart(2,'0'))}</span>
             </div>
             ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
             ${s.notes ? `<div class="notes">${esc(s.notes)}</div>` : ''}
