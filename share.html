@@ -34,7 +34,7 @@
   .share-head p { margin: 0; color: var(--ink-3); font-size: 13px; }
   .share-card {
     background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
-    overflow: hidden;
+    overflow: hidden; display: flex; flex-direction: column;
   }
   .share-card .ph {
     aspect-ratio: 16/9; background: var(--bg-sunk); position: relative;
@@ -48,6 +48,22 @@
   .share-card .addr { font-size: 11.5px; color: var(--ink-3); margin-bottom: 6px; }
   .share-card .notes { font-size: 12px; color: var(--ink-2); white-space: pre-line; line-height: 1.4; }
   .state-msg { text-align: center; padding: 80px 20px; color: var(--ink-3); }
+  .comments { border-top: 1px solid var(--line-soft); padding: 10px 13px; }
+  .comments .c-item { font-size: 11.5px; margin-bottom: 8px; }
+  .comments .c-item .who { font-weight: 600; color: var(--ink-2); }
+  .comments .c-item .when { color: var(--ink-4); font-size: 10.5px; margin-left: 4px; }
+  .comments .c-item .txt { color: var(--ink-2); margin-top: 1px; }
+  .comment-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .comment-form input, .comment-form textarea {
+    border: 1px solid var(--line); background: var(--bg); border-radius: 6px;
+    padding: 6px 8px; font-size: 11.5px; font-family: inherit; outline: none; resize: none;
+  }
+  .comment-form button {
+    align-self: flex-end; appearance: none; border: 0; border-radius: 6px;
+    background: var(--ink); color: var(--bg-elev); font-size: 11.5px; font-weight: 600;
+    padding: 5px 11px; cursor: pointer;
+  }
+  .comment-form button:disabled { opacity: .6; cursor: default; }
 </style>
 </head>
 <body>
@@ -62,6 +78,16 @@
   </div>
 
   <script>
+    // Escapes any user-controlled string before it goes into innerHTML — scene
+    // notes, addresses, and (once comments are involved) arbitrary anonymous
+    // input all pass through this, since building HTML by hand from those
+    // values would otherwise be a stored-XSS hole on a page anyone can post to.
+    function esc(str) {
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+
     (async function () {
       const shareId = new URLSearchParams(location.search).get('s');
       const content = document.getElementById('content');
@@ -75,8 +101,9 @@
         return;
       }
       document.title = 'Storyboard — ' + (result.project_name || 'Shared scenes');
+      const canComment = result.permission === 'comment';
       const permBadge = document.getElementById('permBadge');
-      permBadge.textContent = result.permission === 'comment' ? 'Can comment' : 'Can view';
+      permBadge.textContent = canComment ? 'Can comment' : 'Can view';
       permBadge.style.display = 'inline-block';
 
       const scenes = result.scenes || [];
@@ -85,11 +112,22 @@
 
       const head = document.createElement('div');
       head.className = 'share-head';
-      head.innerHTML = `<h1>${result.project_name || 'Shared scenes'}</h1><p>${scenes.length} scene${scenes.length !== 1 ? 's' : ''} shared with you</p>`;
+      head.innerHTML = `<h1>${esc(result.project_name || 'Shared scenes')}</h1><p>${scenes.length} scene${scenes.length !== 1 ? 's' : ''} shared with you</p>`;
 
       const grid = document.createElement('div');
       grid.className = 'grid';
       grid.style.setProperty('--grid-cols', 4);
+
+      function renderComments(scene, listEl) {
+        listEl.innerHTML = '';
+        (scene.comments || []).forEach(c => {
+          const item = document.createElement('div');
+          item.className = 'c-item';
+          const when = c.ts ? new Date(c.ts).toLocaleString() : '';
+          item.innerHTML = `<span class="who">${esc(c.user)}</span><span class="when">${esc(when)}</span><div class="txt">${esc(c.text)}</div>`;
+          listEl.appendChild(item);
+        });
+      }
 
       scenes.forEach(s => {
         const ep = findEp(s.episode);
@@ -97,16 +135,54 @@
         card.className = 'share-card';
         const photo = (s.photoThumbs && s.photoThumbs[0]) || (s.photos && s.photos[0]);
         card.innerHTML = `
-          ${photo ? `<img src="${photo}" alt="">` : `<div class="ph">${s.photoHint || ''}</div>`}
+          ${photo ? `<img src="${esc(photo)}" alt="">` : `<div class="ph">${esc(s.photoHint || '')}</div>`}
           <div class="body">
-            <div class="name">${s.slug || ''}</div>
+            <div class="name">${esc(s.slug || '')}</div>
             <div class="ribbon">
-              <span class="tag ${(s.intExt || '').toLowerCase().replace('+','')}">${s.intExt || ''}</span>
-              <span class="tag ${(s.dn || '').toLowerCase()}">${s.dn || ''}</span>
+              <span class="tag ${esc((s.intExt || '').toLowerCase().replace('+',''))}">${esc(s.intExt || '')}</span>
+              <span class="tag ${esc((s.dn || '').toLowerCase())}">${esc(s.dn || '')}</span>
             </div>
-            ${s.address ? `<div class="addr">${s.address}</div>` : ''}
-            ${s.notes ? `<div class="notes">${s.notes}</div>` : ''}
+            ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
+            ${s.notes ? `<div class="notes">${esc(s.notes)}</div>` : ''}
           </div>`;
+
+        if (canComment) {
+          const wrap = document.createElement('div');
+          wrap.className = 'comments';
+          const list = document.createElement('div');
+          renderComments(s, list);
+          wrap.appendChild(list);
+
+          const form = document.createElement('div');
+          form.className = 'comment-form';
+          form.innerHTML = `
+            <input type="text" placeholder="Your name" maxlength="60" />
+            <textarea rows="2" placeholder="Add a comment…" maxlength="1000"></textarea>
+            <button type="button">Post</button>`;
+          const nameInput = form.querySelector('input');
+          const textInput = form.querySelector('textarea');
+          const postBtn = form.querySelector('button');
+          postBtn.onclick = async () => {
+            const text = textInput.value.trim();
+            if (!text) return;
+            postBtn.disabled = true;
+            postBtn.textContent = 'Posting…';
+            try {
+              const saved = await window.SB_DATA.addSharedComment(shareId, s.id, nameInput.value, text);
+              s.comments = [...(s.comments || []), saved];
+              renderComments(s, list);
+              textInput.value = '';
+            } catch (err) {
+              alert(err.message || "Couldn't post comment");
+            } finally {
+              postBtn.disabled = false;
+              postBtn.textContent = 'Post';
+            }
+          };
+          wrap.appendChild(form);
+          card.appendChild(wrap);
+        }
+
         grid.appendChild(card);
       });
 

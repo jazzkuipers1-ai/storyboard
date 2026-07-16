@@ -169,11 +169,20 @@
     if (error) { console.error("[SB_DATA] getSharedScenes", error); return null; }
     return data && data[0] ? data[0] : null;
   }
+  // Anonymous commenting — only works if the share's permission is "comment"
+  // (enforced server-side in the RPC, not just hidden client-side).
+  async function addSharedComment(shareId, sceneId, name, text) {
+    const { data, error } = await sb.rpc("add_shared_comment", {
+      p_share_id: shareId, p_scene_id: sceneId, p_name: name, p_text: text,
+    });
+    if (error) throw error;
+    return data;
+  }
 
   window.SB_DATA = {
     listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
     subscribeToProjectData,
     listMembers, inviteMember, removeMember, sendInviteEmail,
-    createShare, getSharedScenes,
+    createShare, getSharedScenes, addSharedComment,
   };
 })();
