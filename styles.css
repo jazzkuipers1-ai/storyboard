@@ -1019,6 +1019,20 @@ input, textarea { font-family: inherit; color: inherit; }
   text-decoration: none;
 }
 .kv dd a:hover { text-decoration: underline; }
+.kv-edit {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ink);
+  border-radius: 5px;
+  padding: 3px 6px;
+  margin: -3px 0 -3px -6px;
+  outline: none;
+  font-family: inherit;
+}
+.kv-edit::placeholder { color: var(--ink-4); }
+.kv-edit:hover, .kv-edit:focus { border-color: var(--line); background: var(--bg-sunk); }
 .slug-edit {
   width: 100%;
   border: 1px solid transparent;

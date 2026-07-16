@@ -5,12 +5,29 @@ const { useState, useEffect, useRef, useMemo } = React;
 // ── Scene Detail Modal ─────────────────────────────────────
 const MAX_PHOTOS = 3;
 
+// Turns a photo's GPS into a readable address via OpenStreetMap's free
+// reverse-geocoding (Nominatim) — no API key/billing account needed, unlike
+// Google's Geocoding API. Only ever used to *pre-fill* an empty address, so
+// it never overwrites something the user typed in themselves.
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=0`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.display_name || null;
+  } catch {
+    return null;
+  }
+}
+
 function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddComment, onCreateGroup, onDuplicate, onDelete, onToast }) {
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
   const [activePhoto, setActivePhoto] = useState(0);
   const [notes, setNotes] = useState(scene.notes);
   const [slug, setSlug] = useState(scene.slug);
   const [locId, setLocId] = useState(scene.locationId ?? "");
+  const [addr, setAddr] = useState(scene.address ?? "");
+  const [mapsOverride, setMapsOverride] = useState(scene.mapsOverride ?? "");
   const [sceneNum, setSceneNum] = useState(scene.scene);
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -82,10 +99,20 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
       const next = [...uploadedPhotos, ...resized.map(r => r.full)];
       const nextThumbs = [...(scene.photoThumbs || []), ...resized.map(r => r.thumb)];
       const nextGeo = [...photoGeo, ...gpsHits];
-      onUpdate({ photos: next, photoThumbs: nextThumbs, photoGeo: nextGeo });
+      const patch = { photos: next, photoThumbs: nextThumbs, photoGeo: nextGeo };
+      // Pre-fill the address from the photo that's now in slot 0 (same photo
+      // that drives the Maps link) — but only if there's nothing there yet,
+      // so this never clobbers an address someone already typed in.
+      let addressFilled = false;
+      if (!scene.address && nextGeo[0]) {
+        const found = await reverseGeocode(nextGeo[0].lat, nextGeo[0].lng);
+        if (found) { patch.address = found; addressFilled = true; }
+      }
+      onUpdate(patch);
       setActivePhoto(next.length - resized.length);
       if (all.length > files.length) onToast?.(`Only added ${files.length} — maximum ${MAX_PHOTOS} photos per card`);
-      if (gpsHits.some(Boolean) && !photoGeo.some(Boolean)) onToast?.("📍 Google Maps link updated from photo location");
+      if (addressFilled) onToast?.("📍 Address and Google Maps link filled in from photo location");
+      else if (gpsHits.some(Boolean) && !photoGeo.some(Boolean)) onToast?.("📍 Google Maps link updated from photo location");
     } finally {
       setUploading(false);
     }
@@ -114,7 +141,16 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
     if (activePhoto === from) setActivePhoto(to);
   }
 
-  useEffect(() => { setSlug(scene.slug); setLocId(scene.locationId ?? ""); setSceneNum(scene.scene); setNotes(scene.notes); }, [scene.id]);
+  useEffect(() => {
+    setSlug(scene.slug); setLocId(scene.locationId ?? ""); setSceneNum(scene.scene); setNotes(scene.notes);
+    setAddr(scene.address ?? ""); setMapsOverride(scene.mapsOverride ?? "");
+  }, [scene.id]);
+  // Picks up the address the moment a photo upload auto-fills it, without
+  // needing to close and reopen the modal — but only into an still-empty
+  // field, so it can never stomp on an address someone's mid-typing.
+  useEffect(() => {
+    if (!addr && scene.address) setAddr(scene.address);
+  }, [scene.address]);
 
   function handleGroupPick(val) {
     if (val === "__new__") {
@@ -132,7 +168,12 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
   // this, since it always reads whichever photo is currently in slot 0.
   const primaryGeo = photoGeo[0] || scene.geo; // scene.geo: back-compat with scenes saved before per-photo GPS
   const mapsQuery = primaryGeo ? `${primaryGeo.lat},${primaryGeo.lng}` : scene.address;
-  const mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapsQuery);
+  // A manual override always wins — it can be a plain search query or a full
+  // Google Maps URL (pasted straight from the app), since sometimes the
+  // photo's GPS or the free-text address isn't quite the exact spot wanted.
+  const mapsUrl = scene.mapsOverride
+    ? (/^https?:\/\//i.test(scene.mapsOverride) ? scene.mapsOverride : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(scene.mapsOverride))
+    : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapsQuery);
 
   return (
     <div className="modal-bg" onClick={onClose}>
@@ -296,16 +337,33 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddC
                 <span className="flag" style={{width:18,height:12,display:"inline-block",borderRadius:2,overflow:"hidden"}}>{ep?.flag}</span>
                 {ep?.country}
               </dd>
-              <dt>Address</dt><dd>{scene.address}</dd>
+              <dt>Address</dt><dd>
+                <input
+                  className="kv-edit"
+                  value={addr}
+                  onChange={e => setAddr(e.target.value)}
+                  onBlur={() => onUpdate({ address: addr })}
+                  placeholder="Street, city, country"
+                />
+              </dd>
               <dt>Google Maps</dt><dd>
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
-                  Open in Maps <Icon name="ext" size={11}/>
-                </a>
-                {primaryGeo && (
-                  <span style={{marginLeft:8,fontSize:11,color:"var(--ink-3)"}} title={`${primaryGeo.lat.toFixed(5)}, ${primaryGeo.lng.toFixed(5)}`}>
-                    📍 from 1st photo
-                  </span>
-                )}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                    Open in Maps <Icon name="ext" size={11}/>
+                  </a>
+                  {primaryGeo && !scene.mapsOverride && (
+                    <span style={{fontSize:11,color:"var(--ink-3)"}} title={`${primaryGeo.lat.toFixed(5)}, ${primaryGeo.lng.toFixed(5)}`}>
+                      📍 from 1st photo
+                    </span>
+                  )}
+                </div>
+                <input
+                  className="kv-edit"
+                  value={mapsOverride}
+                  onChange={e => setMapsOverride(e.target.value)}
+                  onBlur={() => onUpdate({ mapsOverride: mapsOverride.trim() })}
+                  placeholder="Override with a search query or Maps link…"
+                />
               </dd>
             </dl>
 
