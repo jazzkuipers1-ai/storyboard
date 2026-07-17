@@ -850,6 +850,31 @@ input, textarea { font-family: inherit; color: inherit; }
   font-weight: 500;
 }
 
+/* Carousel — cycles a card's photos in place, no need to open the full
+   detail view just to see the 2nd/3rd shot of a location. */
+.card-carousel-btn {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 50%; border: 0;
+  background: rgba(0,0,0,0.55); color: white;
+  display: inline-flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.12s, background 0.12s;
+  backdrop-filter: blur(4px);
+}
+.card .img:hover .card-carousel-btn { opacity: 1; }
+.card-carousel-btn:hover { background: rgba(0,0,0,0.75); }
+.card-carousel-btn.prev { left: 8px; transform: translateY(-50%) scaleX(-1); }
+.card-carousel-btn.next { right: 8px; }
+.card-carousel-dots {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 5px; padding: 4px 7px; border-radius: 999px;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
+}
+.card-carousel-dots .dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255,255,255,0.5); cursor: pointer;
+}
+.card-carousel-dots .dot.active { background: white; }
+
 /* photo placeholder (striped) */
 .ph-stripe {
   width: 100%;

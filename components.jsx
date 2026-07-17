@@ -109,6 +109,15 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
   const [scriptDay, setScriptDay] = useState(scene.shootDay ?? "");
   useEffect(() => { setNum(scene.scene); setLocId(scene.locationId ?? ""); setLoc(scene.slug); setAddr(scene.address); setDesc(scene.notes); setInfo(scene.sceneInfo ?? ""); setScriptDay(scene.shootDay ?? ""); }, [scene.id]);
 
+  // Cycle through this card's photos right here on the board — opening the
+  // full detail view just to see the 2nd/3rd shot of a location was the
+  // complaint this fixes. Thumbs, not full photos: this can be dozens of
+  // cards on screen at once.
+  const cardPhotos = scene.photoThumbs?.length ? scene.photoThumbs : (scene.photos || []);
+  const [photoIdx, setPhotoIdx] = useState(0);
+  useEffect(() => { setPhotoIdx(0); }, [scene.id]);
+  const clampedIdx = Math.min(photoIdx, Math.max(0, cardPhotos.length - 1));
+
   const stop = e => e.stopPropagation();
 
   return (
@@ -163,11 +172,29 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
         )}
       </div>
       <div className="img" onClick={onOpen}>
-        {scene.photos && scene.photos.length ? (
-          <img src={coverPhoto(scene)} alt={scene.slug}
+        {cardPhotos.length ? (
+          <img src={cardPhotos[clampedIdx]} alt={scene.slug}
                style={{width:"100%",aspectRatio:"16 / 9",objectFit:"cover",display:"block"}}/>
         ) : (
           <Placeholder country={scene.country} hint={scene.photoHint} aspect="16 / 9"/>
+        )}
+        {cardPhotos.length > 1 && (
+          <>
+            <button className="card-carousel-btn prev" title="Previous photo"
+              onClick={e => { stop(e); setPhotoIdx(i => (i - 1 + cardPhotos.length) % cardPhotos.length); }}>
+              <Icon name="chevR" size={13}/>
+            </button>
+            <button className="card-carousel-btn next" title="Next photo"
+              onClick={e => { stop(e); setPhotoIdx(i => (i + 1) % cardPhotos.length); }}>
+              <Icon name="chevR" size={13}/>
+            </button>
+            <div className="card-carousel-dots" onClick={stop}>
+              {cardPhotos.map((_, i) => (
+                <span key={i} className={"dot" + (i === clampedIdx ? " active" : "")}
+                      onClick={() => setPhotoIdx(i)}/>
+              ))}
+            </div>
+          </>
         )}
         {showGroup && scene.group ? <span className="group-label">{scene.group}</span> : null}
         {scene.comments.length > 0 ? (
