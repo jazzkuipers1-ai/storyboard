@@ -8,6 +8,22 @@ function tagCls(v) { return v === "I+E" ? "inte" : v.toLowerCase(); }
 // photos just to paint a tiny crop when many scenes are visible at once.
 function coverPhoto(scene) { return (scene.photoThumbs && scene.photoThumbs[0]) || (scene.photos && scene.photos[0]); }
 
+// A manual override always wins (plain search query or a full Maps URL);
+// otherwise prefer the GPS from whichever photo is in slot 0, falling back to
+// the free-text address. Shared by the card, the detail modal, and share.html
+// mirrors the same logic. Returns null if there's nothing to link to yet.
+function sceneMapsUrl(scene) {
+  if (scene.mapsOverride) {
+    return /^https?:\/\//i.test(scene.mapsOverride)
+      ? scene.mapsOverride
+      : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(scene.mapsOverride);
+  }
+  const primaryGeo = (scene.photoGeo && scene.photoGeo[0]) || scene.geo;
+  const query = primaryGeo ? `${primaryGeo.lat},${primaryGeo.lng}` : scene.address;
+  if (!query) return null;
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query);
+}
+
 
 // ── Icons (single-stroke, 16px) ────────────────────────────
 function Icon({ name, size=16 }) {
@@ -117,6 +133,7 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
   const [photoIdx, setPhotoIdx] = useState(0);
   useEffect(() => { setPhotoIdx(0); }, [scene.id]);
   const clampedIdx = Math.min(photoIdx, Math.max(0, cardPhotos.length - 1));
+  const mapsUrl = sceneMapsUrl(scene);
 
   const stop = e => e.stopPropagation();
 
@@ -217,13 +234,21 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
             <option value="DAWN">DAWN</option>
           </select>
         </div>
-        <input
-          className="addr-edit"
-          value={addr}
-          onClick={stop}
-          onChange={e => setAddr(e.target.value)}
-          onBlur={() => onUpdate({ address: addr })}
-        />
+        <div className="addr-row">
+          <input
+            className="addr-edit"
+            value={addr}
+            onClick={stop}
+            onChange={e => setAddr(e.target.value)}
+            onBlur={() => onUpdate({ address: addr })}
+          />
+          {mapsUrl && (
+            <a className="addr-maps-link" href={mapsUrl} target="_blank" rel="noopener noreferrer"
+               title="Open in Google Maps" onClick={stop}>
+              <Icon name="pin" size={12}/>
+            </a>
+          )}
+        </div>
         <textarea
           className="desc-edit"
           value={desc}

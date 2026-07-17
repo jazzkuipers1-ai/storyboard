@@ -57,8 +57,14 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
   // that made a real project's data 25MB, just less aggressive than the
   // first pass.
   // - "full" (1600px longest edge, q .85) for the detail view / print export
-  // - "thumb" (420px longest edge, q .72) for card/row/mini covers, so boards with
-  //   many scenes don't decode dozens of full-res images just to show a small crop
+  // - "thumb" (640px longest edge, q .65) for card/row/mini covers, so boards with
+  //   many scenes don't decode dozens of full-res images just to show a small crop.
+  //   Resolution bumped from 420 — cards render a lot bigger than that on a
+  //   normal (let alone retina) screen, so the cover was visibly softer than
+  //   the detail view even though it's the same photo. Quality kept modest
+  //   (resolution is what was making it look soft, not compression) so the
+  //   file stays close to its old size — ~36KB vs ~20KB before, well under
+  //   the ~50KB a quality bump alone would've cost for the same resolution.
   function drawResized(img, maxDim, quality) {
     let { width, height } = img;
     if (width > maxDim || height > maxDim) {
@@ -80,7 +86,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
         img.onload = () => {
           resolve({
             full: drawResized(img, 1600, 0.85),
-            thumb: drawResized(img, 420, 0.72),
+            thumb: drawResized(img, 640, 0.65),
           });
         };
         img.src = e.target.result;
@@ -172,13 +178,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
   // the free-text address — reordering or removing photos naturally updates
   // this, since it always reads whichever photo is currently in slot 0.
   const primaryGeo = photoGeo[0] || scene.geo; // scene.geo: back-compat with scenes saved before per-photo GPS
-  const mapsQuery = primaryGeo ? `${primaryGeo.lat},${primaryGeo.lng}` : scene.address;
-  // A manual override always wins — it can be a plain search query or a full
-  // Google Maps URL (pasted straight from the app), since sometimes the
-  // photo's GPS or the free-text address isn't quite the exact spot wanted.
-  const mapsUrl = scene.mapsOverride
-    ? (/^https?:\/\//i.test(scene.mapsOverride) ? scene.mapsOverride : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(scene.mapsOverride))
-    : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapsQuery);
+  const mapsUrl = sceneMapsUrl(scene);
 
   return (
     <div className="modal-bg" onClick={onClose}>
@@ -353,9 +353,13 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
               </dd>
               <dt>Google Maps</dt><dd>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
-                    Open in Maps <Icon name="ext" size={11}/>
-                  </a>
+                  {mapsUrl ? (
+                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                      Open in Maps <Icon name="ext" size={11}/>
+                    </a>
+                  ) : (
+                    <span style={{fontSize:12,color:"var(--ink-4)"}}>Add an address or photo to get a link</span>
+                  )}
                   {primaryGeo && !scene.mapsOverride && (
                     <span style={{fontSize:11,color:"var(--ink-3)"}} title={`${primaryGeo.lat.toFixed(5)}, ${primaryGeo.lng.toFixed(5)}`}>
                       📍 from 1st photo

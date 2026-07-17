@@ -716,8 +716,10 @@ input, textarea { font-family: inherit; color: inherit; }
 .tag-select:hover { filter: brightness(0.94); }
 .tag.dusk { background: oklch(0.9 0.07 45); color: oklch(0.42 0.14 40); }
 [data-theme="cinema"] .tag.dusk { background: rgba(230,140,90,.18); color: oklch(0.82 0.12 50); }
+.addr-row { display: flex; align-items: center; gap: 2px; }
 .addr-edit {
   width: 100%;
+  flex: 1;
   border: 1px solid transparent;
   background: transparent;
   font-size: 12px;
@@ -728,6 +730,15 @@ input, textarea { font-family: inherit; color: inherit; }
   margin-top: 2px;
 }
 .addr-edit:hover, .addr-edit:focus { border-color: var(--line); background: var(--bg-sunk); color: var(--ink-2); }
+.addr-maps-link {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  margin-top: 2px;
+  border-radius: 4px;
+  color: var(--ink-3);
+}
+.addr-maps-link:hover { background: var(--bg-sunk); color: var(--accent); }
 .desc-edit {
   width: 100%;
   border: 1px solid transparent;
