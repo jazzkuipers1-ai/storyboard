@@ -1,6 +1,6 @@
 // modals.jsx — Scene detail, PDF import flow, Share
 
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
 // ── Scene Detail Modal ─────────────────────────────────────
 const MAX_PHOTOS = 3;

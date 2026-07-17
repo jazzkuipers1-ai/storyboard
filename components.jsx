@@ -113,7 +113,11 @@ function Avatar({ user, size=24 }) {
 }
 
 // ── Scene card (for grid) ──────────────────────────────────
-function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDragStart, onDragOver, onDrop, onDragEnd, dragOver, onDuplicate, onDelete, size }) {
+// Memoized: with a couple hundred scenes on screen, one card's edit (or a
+// realtime echo of it) shouldn't force every other card to re-render too —
+// see the App-level scene-reference and callback-identity stability this
+// relies on.
+function SceneCardImpl({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDragStart, onDragOver, onDrop, onDragEnd, dragOver, onDuplicate, onDelete, size }) {
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [num, setNum] = useState(scene.scene);
@@ -294,6 +298,7 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
     </div>
   );
 }
+const SceneCard = React.memo(SceneCardImpl);
 
 // ── Sidebar item ───────────────────────────────────────────
 function SideItem({ active, onClick, children, count, dot, flag, onDelete }) {
@@ -314,7 +319,7 @@ function SideItem({ active, onClick, children, count, dot, flag, onDelete }) {
 }
 
 // ── Scene row (compact list layout) ────────────────────────
-function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onDragOver, onDrop, onDragEnd, dragOver, onDuplicate, onDelete }) {
+function SceneRowImpl({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onDragOver, onDrop, onDragEnd, dragOver, onDuplicate, onDelete }) {
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
   const [locId, setLocId] = useState(scene.locationId ?? "");
   const [loc, setLoc] = useState(scene.slug);
@@ -374,6 +379,7 @@ function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onD
     </div>
   );
 }
+const SceneRow = React.memo(SceneRowImpl);
 
 // ── Print sheets (A4, hidden on screen, shown via @media print) ─
 function PrintSheets({ scenes, isFilm, perPage, computePrintPages, projectName }) {

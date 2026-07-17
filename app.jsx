@@ -9,6 +9,59 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "gridCols": 4
 }/*EDITMODE-END*/;
 
+// Key-order-independent JSON serialization — Postgres's jsonb type does not
+// preserve object key insertion order, so a scene fetched back from the
+// server can have its keys in a different order than the same scene as
+// constructed locally even when every value is identical. A plain
+// JSON.stringify comparison would call those "different" every time and
+// silently defeat the reference-reuse below (and the memoization it exists
+// to enable) on every single realtime sync.
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
+  const keys = Object.keys(value).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + stableStringify(value[k])).join(",") + "}";
+}
+
+// Hands back a per-id callback, created once and reused forever after — the
+// actual logic always runs the *latest* fn (kept fresh via a ref) so there's
+// no stale-closure risk, but the returned function reference for a given id
+// never changes across renders. Needed so SceneCard/SceneRow (wrapped in
+// React.memo) can actually skip re-rendering: passing a fresh inline arrow
+// function as a prop on every render — `onOpen={() => setOpenSceneId(s.id)}`
+// — defeats memoization even when the scene itself didn't change, since the
+// prop always looks "new".
+function useStableCallbackCache(fn) {
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+  const cache = useRef(new Map());
+  return useCallback((id) => {
+    if (!cache.current.has(id)) {
+      cache.current.set(id, (...args) => fnRef.current(id, ...args));
+    }
+    return cache.current.get(id);
+  }, []);
+}
+
+// Sidebar/PageHead/GridView/GroupsView/MapView are defined *inside* App (they
+// close directly over its state instead of a big prop-drilling exercise),
+// but invoking one of them via JSX — <GridView/> — makes React treat it as a
+// brand-new component type on every single App render, since a function
+// declared inside another function is a new object each time. React can't
+// tell that "new" GridView apart from the old one, so it unmounts the whole
+// previous subtree and mounts a fresh one instead of just re-rendering it —
+// on literally every keystroke or autosave. That's what the page "glitching"
+// (cards visibly fading back in, mid-typing focus loss) actually was.
+// This keeps the component's *identity* stable forever (a ref, created once)
+// while always calling whatever the latest render's version of the function
+// is (kept fresh via a second ref) — same trick as useStableCallbackCache,
+// just for a whole component instead of one callback.
+function useStableComponent(renderFn) {
+  const ref = useRef(renderFn);
+  ref.current = renderFn;
+  return useRef((props) => ref.current(props)).current;
+}
+
 // Bundles scenes that share a location — either a manually assigned group, or
 // (when ungrouped) an identical slug — preserving first-seen order. Singleton
 // entries are still returned so callers can decide whether to show them plain.
@@ -59,6 +112,27 @@ function App() {
   // photo reappearing) until the pending save completes and corrects it
   // again — or forever, if that save had silently failed with no retry.
   const scenePatchRef = useRef({});
+
+  // Stable per-scene-id callbacks for the card grid (see React.memo on
+  // SceneCard/SceneRow) — always calls the current updateScene/deleteScene/
+  // duplicateScene under the hood, just via a reference that doesn't change
+  // across renders.
+  const getOnOpen = useStableCallbackCache((id) => setOpenSceneId(id));
+  const getOnUpdate = useStableCallbackCache((id, patch) => updateScene(id, patch));
+  const getOnDuplicate = useStableCallbackCache((id) => duplicateScene(id));
+  const getOnDelete = useStableCallbackCache((id) => deleteScene(id));
+  // Same deal for drag-reorder — these were still fresh inline arrows in
+  // commonProps on every render, which alone was enough to defeat
+  // React.memo on every card (memo does a shallow compare of *all* props,
+  // so any one unstable prop makes every card look "changed").
+  const getOnDragStart = useStableCallbackCache((id, e) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; });
+  const getOnDragOver = useStableCallbackCache((id, e) => { e.preventDefault(); setDragOverId(id); });
+  const getOnDrop = useStableCallbackCache((id, e) => {
+    e.preventDefault();
+    setDragId(current => { if (current) reorderScene(current, id); return null; });
+    setDragOverId(null);
+  });
+  const getOnDragEnd = useStableCallbackCache(() => { setDragId(null); setDragOverId(null); });
 
   // ── Autosave + live sync ──────────────────────────────────
   // Scenes are NOT part of this: they're written server-side, one scene (or
@@ -112,10 +186,26 @@ function App() {
       // this is the one true copy — always apply it, echo or not. Except:
       // re-layer any of THIS client's own not-yet-confirmed edits on top,
       // since the refetch can easily reflect a moment before they landed.
-      setScenes(row.scenes.map(s => {
-        const pending = scenePatchRef.current[s.id];
-        return pending ? { ...s, ...pending.patch } : s;
-      }));
+      //
+      // Every scene here is freshly parsed from a ~14MB fetch (this project
+      // has 320 scenes' worth of photos in one JSONB blob), so a plain
+      // `.map()` hands back a brand-new object for every single scene even
+      // when nothing about it changed — which meant one person editing one
+      // scene's notes caused every OTHER open board to re-render all 320
+      // cards, which is what was showing up as the page "glitching"/
+      // stuttering on a save. Reusing the existing reference for scenes
+      // whose content is unchanged lets React.memo on SceneCard skip
+      // re-rendering the ones that didn't actually change.
+      setScenes(prev => {
+        const prevById = new Map(prev.map(s => [s.id, s]));
+        return row.scenes.map(incoming => {
+          const pending = scenePatchRef.current[incoming.id];
+          const merged = pending ? { ...incoming, ...pending.patch } : incoming;
+          const existing = prevById.get(incoming.id);
+          if (existing && stableStringify(existing) === stableStringify(merged)) return existing;
+          return merged;
+        });
+      });
       setGroupNames(row.group_names || []);
       setSuggestions(row.suggestions || []);
     });
@@ -785,17 +875,17 @@ function App() {
     const commonProps = s => ({
       key: s.id,
       scene: s,
-      onOpen: () => setOpenSceneId(s.id),
-      onUpdate: patch => updateScene(s.id, patch),
+      onOpen: getOnOpen(s.id),
+      onUpdate: getOnUpdate(s.id),
       isFilm,
       draggable: true,
       dragOver: dragOverId === s.id,
-      onDragStart: e => { setDragId(s.id); e.dataTransfer.effectAllowed = "move"; },
-      onDragOver: e => { e.preventDefault(); setDragOverId(s.id); },
-      onDrop: e => { e.preventDefault(); if (dragId) reorderScene(dragId, s.id); setDragId(null); setDragOverId(null); },
-      onDragEnd: () => { setDragId(null); setDragOverId(null); },
-      onDuplicate: () => duplicateScene(s.id),
-      onDelete: () => deleteScene(s.id),
+      onDragStart: getOnDragStart(s.id),
+      onDragOver: getOnDragOver(s.id),
+      onDrop: getOnDrop(s.id),
+      onDragEnd: getOnDragEnd(s.id),
+      onDuplicate: getOnDuplicate(s.id),
+      onDelete: getOnDelete(s.id),
     });
     const listClusters = useMemo(() => clusterByLocation(filtered), [filtered]);
     return (
@@ -1085,6 +1175,14 @@ function App() {
   }
 
   // ── Render ─────────────────────────────────────────────
+  // See useStableComponent above — without this, every one of these remounts
+  // (not just re-renders) on every edit/autosave.
+  const StableSidebar = useStableComponent(Sidebar);
+  const StablePageHead = useStableComponent(PageHead);
+  const StableGridView = useStableComponent(GridView);
+  const StableGroupsView = useStableComponent(GroupsView);
+  const StableMapView = useStableComponent(MapView);
+
   // PrintSheets has to live outside .app: @media print hides .app entirely
   // (so the on-screen UI doesn't show up in the printout), and a display:none
   // ancestor hides its descendants regardless of their own display value —
@@ -1156,14 +1254,14 @@ function App() {
         </button>
       </header>
 
-      <Sidebar/>
+      <StableSidebar/>
       <div className="nav-backdrop" onClick={() => setNavOpen(false)}/>
 
       <main className="main">
-        <PageHead/>
-        {view === "grid" && <GridView/>}
-        {view === "groups" && <GroupsView/>}
-        {view === "map" && <MapView/>}
+        <StablePageHead/>
+        {view === "grid" && <StableGridView/>}
+        {view === "groups" && <StableGroupsView/>}
+        {view === "map" && <StableMapView/>}
       </main>
 
       {openScene && (
