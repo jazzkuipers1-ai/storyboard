@@ -571,13 +571,33 @@ function App() {
       };
     }));
   }
-  function addScenePhoto(id, photo, thumb, geo) {
+  // fullBlob/thumbBlob are real image bytes (see modals.jsx's drawResized) —
+  // uploaded to Storage first so the scene record only ever holds short
+  // URLs, never the photo's actual bytes. Async (unlike the other scene
+  // mutators, which update local state synchronously first) because there's
+  // no meaningful "optimistic" state to show before the file exists
+  // somewhere reachable by URL; the caller's own "uploading" indicator
+  // covers this.
+  async function addScenePhoto(id, fullBlob, thumbBlob, geo) {
+    if (!project?.id) return;
+    const [photo, thumb] = await Promise.all([
+      window.SB_DATA.uploadScenePhoto(project.id, id, fullBlob, "full"),
+      window.SB_DATA.uploadScenePhoto(project.id, id, thumbBlob, "thumb"),
+    ]);
     applyAddScenePhotoLocally(id, photo, thumb, geo);
-    if (project?.id) withPersistentRetry("appendScenePhoto", [id, photo, thumb, geo]);
+    withPersistentRetry("appendScenePhoto", [id, photo, thumb, geo]);
   }
   function removeScenePhoto(id, photo) {
+    // Grab the matching thumb before it's gone from local state, so both
+    // files can be cleaned up from Storage — best-effort, a failed delete
+    // just leaves an orphaned file rather than breaking anything visible.
+    const scene = scenes.find(s => s.id === id);
+    const idx = (scene?.photos || []).indexOf(photo);
+    const thumb = idx !== -1 ? scene.photoThumbs?.[idx] : null;
     applyRemoveScenePhotoLocally(id, photo);
     if (project?.id) withPersistentRetry("removeScenePhoto", [id, photo]);
+    window.SB_DATA.deleteScenePhotoFile(photo);
+    if (thumb) window.SB_DATA.deleteScenePhotoFile(thumb);
   }
   function moveScenePhoto(id, photo, offset) {
     applyMoveScenePhotoLocally(id, photo, offset);

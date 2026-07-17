@@ -74,7 +74,9 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
     const canvas = document.createElement("canvas");
     canvas.width = width; canvas.height = height;
     canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-    return canvas.toDataURL("image/jpeg", quality);
+    // A blob (real bytes), not a data URI — these get uploaded to Storage as
+    // actual files, not embedded as base64 text in the scene record.
+    return new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", quality));
   }
   function resizeImage(file) {
     return new Promise((resolve, reject) => {
@@ -83,11 +85,12 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
       reader.onload = e => {
         const img = new Image();
         img.onerror = reject;
-        img.onload = () => {
-          resolve({
-            full: drawResized(img, 1600, 0.85),
-            thumb: drawResized(img, 640, 0.65),
-          });
+        img.onload = async () => {
+          const [fullBlob, thumbBlob] = await Promise.all([
+            drawResized(img, 1600, 0.85),
+            drawResized(img, 640, 0.65),
+          ]);
+          resolve({ fullBlob, thumbBlob });
         };
         img.src = e.target.result;
       };
@@ -117,7 +120,11 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
         Promise.all(files.map(f => window.extractPhotoGPS?.(f) ?? Promise.resolve(null))),
       ]);
       const hadNoGeoYet = !photoGeo.some(Boolean);
-      resized.forEach((r, i) => onAddPhoto(r.full, r.thumb, gpsHits[i]));
+      // onAddPhoto uploads the blobs to Storage (it has the project id this
+      // component doesn't) and only resolves once that's done — awaited so
+      // the "uploading" state above still covers the actual upload, not just
+      // the client-side resize.
+      await Promise.all(resized.map((r, i) => onAddPhoto(r.fullBlob, r.thumbBlob, gpsHits[i])));
       setActivePhoto(uploadedPhotos.length);
       // Pre-fill the address from whichever photo ends up in slot 0 (same one
       // that drives the Maps link) — but only if there's nothing there yet,
@@ -206,7 +213,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
               {uploading && (
                 <div className="photo-uploading">
                   <div className="spin" style={{width:20,height:20,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%"}}/>
-                  Optimizing for print…
+                  Uploading…
                 </div>
               )}
             </div>

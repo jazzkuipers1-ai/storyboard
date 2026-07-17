@@ -243,11 +243,46 @@
     return data;
   }
 
+  // ── Scene photo storage — actual files in a public bucket, not base64
+  // text embedded in the scenes JSONB blob. That blob used to carry every
+  // photo's full bytes (~33% inflated by base64) on every single fetch of
+  // any scene data, whether a photo was needed or not — a real project's
+  // data could be tens of MB, most of it photos re-transferred on every
+  // load. A URL is a drop-in replacement everywhere the app already just
+  // does <img src={photo}> (print export, share page, cards, detail view),
+  // so nothing downstream of upload needed to change. ──
+  function scenePhotoPath(projectId, sceneId, kind) {
+    return `${projectId}/${sceneId}-${Date.now()}-${Math.random().toString(36).slice(2)}-${kind}.jpg`;
+  }
+  async function uploadScenePhoto(projectId, sceneId, blob, kind) {
+    const path = scenePhotoPath(projectId, sceneId, kind);
+    const { error } = await sb.storage.from("scene-photos").upload(path, blob, {
+      contentType: "image/jpeg", upsert: false,
+    });
+    if (error) throw error;
+    return sb.storage.from("scene-photos").getPublicUrl(path).data.publicUrl;
+  }
+  // Best-effort — a photo failing to delete from storage just leaves an
+  // orphaned file (a little wasted space), not a broken scene, so this
+  // never blocks or throws into the caller's own save/retry flow.
+  async function deleteScenePhotoFile(url) {
+    try {
+      const marker = "/scene-photos/";
+      const idx = url.indexOf(marker);
+      if (idx === -1) return;
+      const path = decodeURIComponent(url.slice(idx + marker.length).split("?")[0]);
+      await sb.storage.from("scene-photos").remove([path]);
+    } catch (err) {
+      console.error("[SB_DATA] deleteScenePhotoFile", err);
+    }
+  }
+
   window.SB_DATA = {
     listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
     subscribeToProjectData,
     mergeScenePatch, deleteSceneById, appendScenes, duplicateSceneAfter, reorderScenes,
     appendScenePhoto, removeScenePhoto, moveScenePhoto,
+    uploadScenePhoto, deleteScenePhotoFile,
     listMembers, inviteMember, removeMember, sendInviteEmail,
     createShare, getSharedScenes, addSharedComment,
   };
