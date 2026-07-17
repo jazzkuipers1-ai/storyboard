@@ -40,11 +40,15 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
 
   // Resize client-side, once per upload, into two sizes. These only ever need
   // to look sharp printed on A4 (never full-bleed, always one of several
-  // cards on a page) — not archival quality — so both are kept small: a
-  // smaller payload uploads and syncs faster, which also narrows the window
-  // for the kind of concurrent-edit race that used to lose photos.
-  // - "full" (1400px longest edge, q .78) for the detail view / print export
-  // - "thumb" (360px longest edge, q .65) for card/row/mini covers, so boards with
+  // cards on a page) — not archival quality — so both are kept far smaller
+  // than the original upload: a smaller payload uploads and syncs faster,
+  // which also narrows the window for the kind of concurrent-edit race that
+  // used to lose photos. Quality nudged up from the original 78/65 (was
+  // visibly grainy/blocky) — still nowhere near the original ~2000px/q.85
+  // that made a real project's data 25MB, just less aggressive than the
+  // first pass.
+  // - "full" (1600px longest edge, q .85) for the detail view / print export
+  // - "thumb" (420px longest edge, q .72) for card/row/mini covers, so boards with
   //   many scenes don't decode dozens of full-res images just to show a small crop
   function drawResized(img, maxDim, quality) {
     let { width, height } = img;
@@ -66,8 +70,8 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
         img.onerror = reject;
         img.onload = () => {
           resolve({
-            full: drawResized(img, 1400, 0.78),
-            thumb: drawResized(img, 360, 0.65),
+            full: drawResized(img, 1600, 0.85),
+            thumb: drawResized(img, 420, 0.72),
           });
         };
         img.src = e.target.result;
