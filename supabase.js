@@ -155,13 +155,19 @@
   // changed, go check" signal and re-fetching over plain REST (no such size
   // limit) means collaborators' views actually stay in sync once photos are
   // involved, instead of quietly missing updates.
-  function subscribeToProjectData(projectId, onChange) {
+  // shouldSkip() lets the caller avoid the full refetch entirely when a
+  // notification is almost certainly just the echo of a write *this* client
+  // just made — this project's scenes/photos can add up to several MB, and
+  // pulling that whole blob back down after every single edit (including
+  // your own) was real, felt latency, not just an unnecessary re-render.
+  function subscribeToProjectData(projectId, onChange, shouldSkip) {
     const channel = sb
       .channel("project_data:" + projectId)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "project_data", filter: "project_id=eq." + projectId },
         async () => {
+          if (shouldSkip && shouldSkip()) return;
           const fresh = await getProjectData(projectId);
           if (fresh) onChange(fresh);
         }

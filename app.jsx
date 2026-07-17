@@ -112,6 +112,21 @@ function App() {
   // photo reappearing) until the pending save completes and corrects it
   // again — or forever, if that save had silently failed with no retry.
   const scenePatchRef = useRef({});
+  // Timestamp of this client's own last successful write. A realtime
+  // notification that arrives while this is still fresh is almost certainly
+  // just the echo of that write — local state is already correct (it *is*
+  // what was just saved), so there's nothing to reconcile. Skipping the
+  // refetch there avoids pulling this project's whole ~14MB scenes blob back
+  // down after every single edit *this* client made, which was the main
+  // remaining source of the page hitching during normal (non-collaborative)
+  // use — a large fetch + JSON parse is real, felt work even once it no
+  // longer causes a mass re-render. A stale/concurrent edit from someone
+  // else landing in the same ~2s window is the one thing this trades away —
+  // it'll show up on that collaborator's own next edit or this client's next
+  // fetch instead of immediately, which is a fair trade for how rare
+  // same-second concurrent edits actually are.
+  const lastOwnWriteAtRef = useRef(0);
+  const OWN_WRITE_GRACE_MS = 2000;
 
   // Stable per-scene-id callbacks for the card grid (see React.memo on
   // SceneCard/SceneRow) — always calls the current updateScene/deleteScene/
@@ -161,6 +176,7 @@ function App() {
           episodes: window.STORY.EPISODES, group_names: groupNames, suggestions,
         });
         lastSyncedRef.current = json;
+        lastOwnWriteAtRef.current = Date.now();
         setSaveState("saved");
       } catch (err) {
         console.error("Autosave failed", err);
@@ -208,7 +224,7 @@ function App() {
       });
       setGroupNames(row.group_names || []);
       setSuggestions(row.suggestions || []);
-    });
+    }, () => Date.now() - lastOwnWriteAtRef.current < OWN_WRITE_GRACE_MS);
   }, [project?.id]);
 
   const [view, setView] = useState("grid"); // grid | groups | map
@@ -356,6 +372,60 @@ function App() {
     } catch {}
   }
 
+  // Photo add/remove/move go through their own atomic RPCs (see
+  // addScenePhoto/removeScenePhoto/moveScenePhoto below) via withRetry, not
+  // scheduleScenePatch — which meant they had *no* localStorage backup at
+  // all. On a phone, taking a photo and immediately switching to another app
+  // (or the OS just deciding to kill a backgrounded tab) is completely
+  // normal, and mobile Safari/Chrome will happily discard a tab's whole JS
+  // state within seconds of backgrounding it. If that upload's network
+  // request hadn't landed yet, it was just gone — no error, no retry, no
+  // recovery, which is exactly what "everything I upload from my phone
+  // disappears on reload" was. This mirrors persistPendingPatches/
+  // scenePatchRef for that same class of operation.
+  const pendingJobsKey = project?.id ? `storyboard:pendingJobs:${project.id}` : null;
+  const pendingJobsRef = useRef({}); // jobId -> { type, args, retryDelay }
+
+  function persistPendingJobs() {
+    if (!pendingJobsKey) return;
+    const store = {};
+    Object.entries(pendingJobsRef.current).forEach(([jobId, entry]) => { store[jobId] = { type: entry.type, args: entry.args }; });
+    try {
+      if (Object.keys(store).length) localStorage.setItem(pendingJobsKey, JSON.stringify(store));
+      else localStorage.removeItem(pendingJobsKey);
+    } catch {}
+  }
+
+  const JOB_HANDLERS = {
+    appendScenePhoto: (args) => window.SB_DATA.appendScenePhoto(project.id, ...args),
+    removeScenePhoto: (args) => window.SB_DATA.removeScenePhoto(project.id, ...args),
+    moveScenePhoto: (args) => window.SB_DATA.moveScenePhoto(project.id, ...args),
+  };
+
+  function withPersistentRetry(type, args, existingJobId) {
+    const jobId = existingJobId || `${type}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    let delay = 1500;
+    pendingJobsRef.current[jobId] = { type, args, retryDelay: delay };
+    persistPendingJobs();
+    function attempt() {
+      setSaveState("saving");
+      JOB_HANDLERS[type](args).then(() => {
+        setSaveState("saved");
+        lastOwnWriteAtRef.current = Date.now();
+        delete pendingJobsRef.current[jobId];
+        persistPendingJobs();
+        retryNowRef.current.delete(jobId);
+      }).catch(err => {
+        console.error("Save failed, retrying", err);
+        setSaveState("error");
+        const timer = setTimeout(attempt, delay);
+        delay = Math.min(delay * 2, 30000);
+        retryNowRef.current.set(jobId, () => { clearTimeout(timer); attempt(); });
+      });
+    }
+    attempt();
+  }
+
   function flushScenePatch(id) {
     const entry = scenePatchRef.current[id];
     if (!entry || !project?.id) return;
@@ -365,6 +435,7 @@ function App() {
       if (scenePatchRef.current[id] !== entry) return; // a newer edit queued while this was in flight
       delete scenePatchRef.current[id];
       persistPendingPatches();
+      lastOwnWriteAtRef.current = Date.now();
       if (!Object.keys(scenePatchRef.current).length) setSaveState("saved");
     }).catch(err => {
       console.error("Scene autosave failed, retrying", err);
@@ -400,9 +471,41 @@ function App() {
     });
   }, [pendingKey]);
 
+  // Same recovery, for photo add/remove/move (see pendingJobsRef above).
+  useEffect(() => {
+    if (!pendingJobsKey) return;
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem(pendingJobsKey) || "{}"); } catch {}
+    let clearedStale = false;
+    Object.entries(stored).forEach(([jobId, { type, args }]) => {
+      if (type === "appendScenePhoto") {
+        const [id, photo] = args;
+        // If the append actually landed before the crash, don't add it twice
+        // — and drop the now-stale marker instead of checking (and skipping)
+        // it forever on every future load.
+        const alreadyThere = scenes.find(s => s.id === id)?.photos?.includes(photo);
+        if (alreadyThere) { delete stored[jobId]; clearedStale = true; return; }
+        applyAddScenePhotoLocally(...args);
+      } else if (type === "removeScenePhoto") {
+        applyRemoveScenePhotoLocally(...args);
+      } else if (type === "moveScenePhoto") {
+        applyMoveScenePhotoLocally(...args);
+      } else {
+        return;
+      }
+      withPersistentRetry(type, args, jobId);
+    });
+    if (clearedStale) {
+      try {
+        if (Object.keys(stored).length) localStorage.setItem(pendingJobsKey, JSON.stringify(stored));
+        else localStorage.removeItem(pendingJobsKey);
+      } catch {}
+    }
+  }, [pendingJobsKey]);
+
   useEffect(() => {
     function handleBeforeUnload(e) {
-      if (Object.keys(scenePatchRef.current).length || saveState !== "saved") {
+      if (Object.keys(scenePatchRef.current).length || Object.keys(pendingJobsRef.current).length || saveState !== "saved") {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -428,16 +531,15 @@ function App() {
   // its patch replaced the *entire* photos/photoThumbs/photoGeo arrays with
   // its own out-of-date copy. These operate on whatever the server's current
   // array is at write time, so that can't happen.
-  function addScenePhoto(id, photo, thumb, geo) {
+  function applyAddScenePhotoLocally(id, photo, thumb, geo) {
     setScenes(prev => prev.map(s => s.id === id ? {
       ...s,
       photos: [...(s.photos || []), photo],
       photoThumbs: [...(s.photoThumbs || []), thumb],
       photoGeo: [...(s.photoGeo || []), geo],
     } : s));
-    if (project?.id) withRetry(() => window.SB_DATA.appendScenePhoto(project.id, id, photo, thumb, geo));
   }
-  function removeScenePhoto(id, photo) {
+  function applyRemoveScenePhotoLocally(id, photo) {
     setScenes(prev => prev.map(s => {
       if (s.id !== id) return s;
       const idx = (s.photos || []).indexOf(photo);
@@ -449,9 +551,8 @@ function App() {
         photoGeo: (s.photoGeo || []).filter((_, i) => i !== idx),
       };
     }));
-    if (project?.id) withRetry(() => window.SB_DATA.removeScenePhoto(project.id, id, photo));
   }
-  function moveScenePhoto(id, photo, offset) {
+  function applyMoveScenePhotoLocally(id, photo, offset) {
     setScenes(prev => prev.map(s => {
       if (s.id !== id) return s;
       const from = (s.photos || []).indexOf(photo);
@@ -469,7 +570,18 @@ function App() {
         photoGeo: swap(s.photoGeo || []),
       };
     }));
-    if (project?.id) withRetry(() => window.SB_DATA.moveScenePhoto(project.id, id, photo, offset));
+  }
+  function addScenePhoto(id, photo, thumb, geo) {
+    applyAddScenePhotoLocally(id, photo, thumb, geo);
+    if (project?.id) withPersistentRetry("appendScenePhoto", [id, photo, thumb, geo]);
+  }
+  function removeScenePhoto(id, photo) {
+    applyRemoveScenePhotoLocally(id, photo);
+    if (project?.id) withPersistentRetry("removeScenePhoto", [id, photo]);
+  }
+  function moveScenePhoto(id, photo, offset) {
+    applyMoveScenePhotoLocally(id, photo, offset);
+    if (project?.id) withPersistentRetry("moveScenePhoto", [id, photo, offset]);
   }
   // Retries a one-off scene write (delete/duplicate/reorder/comment) with
   // backoff until it succeeds, same as scheduleScenePatch — a save that only
@@ -483,6 +595,7 @@ function App() {
       setSaveState("saving");
       fn().then(() => {
         setSaveState("saved");
+        lastOwnWriteAtRef.current = Date.now();
         retryNowRef.current.delete(key);
       }).catch(err => {
         console.error("Save failed, retrying", err);
