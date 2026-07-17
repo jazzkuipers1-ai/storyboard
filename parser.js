@@ -154,6 +154,14 @@
 
   // ── Map a raw scene draft to the app's Scene-import shape ──
   function toSceneDraft(raw, i) {
+    // Episode comes from the scene number's own leading integer — the
+    // production's own convention ("1.56" = episode 1, scene 56) — not from
+    // which country the scene happens to be shot in. A single episode can
+    // freely mix countries (e.g. a present-day storyline intercut with a
+    // flashback abroad), so the country letter and the episode are
+    // independent pieces of information, not a 1:1 mapping.
+    const epMatch = /^(\d+)/.exec(raw.num || "");
+    const episode = epMatch ? `ep${parseInt(epMatch[1], 10)}` : "ep1";
     const ctry = COUNTRY_MAP[raw.country] || COUNTRY_MAP.F;
     const dn = TOD_MAP[raw.tod] || "DAY";
     const intExt = raw.ie === "I+E" ? "I+E" : raw.ie;
@@ -193,7 +201,7 @@
 
     return {
       tmpId: `chrono-${raw.num}`,
-      episode: ctry.episode,
+      episode,
       country: ctry.country,
       scene: raw.num,
       intExt,

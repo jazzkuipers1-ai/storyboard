@@ -310,14 +310,13 @@
     }
 
     const PALETTE = ['#9C6A3F', '#3C6EB4', '#2A6F3C', '#7A5AE0', '#C04848', '#1B1B1B'];
-    const EP_TITLES = { ep1: 'France', ep2: 'Yugoslavia', ep3: 'The Netherlands', ep4: 'Germany' };
-    const EP_COLORS = { ep1: '#3C6EB4', ep2: '#D52B1E', ep3: '#21468B', ep4: '#1B1B1B' };
 
     function buildSceneObjects(parsed) {
       return parsed.map((p, i) => ({
         id: `s${i + 1}`,
         scene: p.scene,
         episode: p.episode,
+        country: p.country,
         intExt: p.intExt,
         dn: p.dn,
         slug: p.slug,
@@ -334,21 +333,19 @@
         shootIndex: i,
       }));
     }
+    // Episodes are just "Episode N" — no fixed country, since a single
+    // episode can freely mix countries (e.g. present-day storyline intercut
+    // with a flashback abroad). Country is tracked per *scene* instead (see
+    // buildSceneObjects) and the sidebar/filters group by that directly.
     function buildEpisodesFromScenes(scenes) {
-      // Numbered from the "epN" id itself (ep1 -> 101, ep2 -> 102, ...), not
-      // from which episode's scenes happen to appear first in the PDF — a
-      // chrono script's story order often isn't the same as episode order
-      // (a flashback into episode 2 can open the document), so numbering by
-      // first-appearance made the displayed "EP 10x" wrong/inconsistent.
       const ids = [...new Set(scenes.map(s => s.episode))];
       return ids.map((id, i) => {
         const num = parseInt(String(id).replace(/\D/g, ''), 10);
         return {
           id, n: 100 + (Number.isFinite(num) && num > 0 ? num : i + 1),
-          title: EP_TITLES[id] || id,
-          country: (scenes.find(s => s.episode === id) || {}).country || EP_TITLES[id] || id,
+          title: `Episode ${Number.isFinite(num) && num > 0 ? num : i + 1}`,
           era: '',
-          color: EP_COLORS[id] || PALETTE[i % PALETTE.length],
+          color: PALETTE[i % PALETTE.length],
         };
       });
     }

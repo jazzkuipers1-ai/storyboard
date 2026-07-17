@@ -4,6 +4,15 @@ const { useState, useEffect, useRef, useMemo } = React;
 
 // ── Scene Detail Modal ─────────────────────────────────────
 const MAX_PHOTOS = 3;
+// Country lives on the scene itself (not the episode — a single episode can
+// freely mix countries, e.g. a flashback abroad), so flags are looked up by
+// that directly rather than through window.STORY.EPISODES.
+const COUNTRY_FLAGS = {
+  France: window.STORY.FLAG_FR,
+  Yugoslavia: window.STORY.FLAG_YU,
+  "The Netherlands": window.STORY.FLAG_NL,
+  Germany: window.STORY.FLAG_DE,
+};
 
 // Turns a photo's GPS into a readable address via OpenStreetMap's free
 // reverse-geocoding (Nominatim) — no API key/billing account needed, unlike
@@ -183,7 +192,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
               {isUploaded(activePhoto) ? (
                 <img src={photos[activePhoto]} alt={scene.slug} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
               ) : (
-                <Placeholder country={ep?.country} hint={photos[activePhoto]} aspect="auto"/>
+                <Placeholder country={scene.country} hint={photos[activePhoto]} aspect="auto"/>
               )}
               <div style={{position:"absolute",top:12,left:12,display:"flex",gap:6}}>
                 <span className={`tag ${tagCls(scene.intExt)}`}>{scene.intExt}</span>
@@ -235,7 +244,7 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
                       )}
                     </>
                   ) : (
-                    <Placeholder country={ep?.country} hint={p} aspect="auto" small/>
+                    <Placeholder country={scene.country} hint={p} aspect="auto" small/>
                   )}
                 </div>
               ))}
@@ -328,10 +337,10 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
             </div>
 
             <dl className="kv">
-              {!isFilm && <><dt>Episode</dt><dd>{ep?.n} · {ep?.title} <span style={{color:"var(--ink-3)"}}>· {ep?.era}</span></dd></>}
+              {!isFilm && <><dt>Episode</dt><dd>{ep?.n} · {ep?.title}</dd></>}
               <dt>Country</dt><dd style={{display:"flex",alignItems:"center",gap:8}}>
-                <span className="flag" style={{width:18,height:12,display:"inline-block",borderRadius:2,overflow:"hidden"}}>{ep?.flag}</span>
-                {ep?.country}
+                <span className="flag" style={{width:18,height:12,display:"inline-block",borderRadius:2,overflow:"hidden"}}>{COUNTRY_FLAGS[scene.country]}</span>
+                {scene.country}
               </dd>
               <dt>Address</dt><dd>
                 <input
@@ -654,7 +663,7 @@ function ImportModal({ isFilm, onSetProductionType, onClose, onImport }) {
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12}}>
                         <span style={{width:14,height:10,display:"inline-block",borderRadius:2,overflow:"hidden",border:"0.5px solid var(--line)"}}>
-                          {ep?.flag}
+                          {COUNTRY_FLAGS[p.country]}
                         </span>
                         {p.country}
                       </div>
@@ -911,10 +920,7 @@ function ExportModal({ scenes, isFilm, onClose, onExportCSV, onExportLocationsCS
 
   const countries = useMemo(() => {
     const set = new Set();
-    scenes.forEach(s => {
-      const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
-      if (ep?.country) set.add(ep.country);
-    });
+    scenes.forEach(s => { if (s.country) set.add(s.country); });
     return [...set];
   }, [scenes]);
   const groups = useMemo(() => {
@@ -955,7 +961,7 @@ function ExportModal({ scenes, isFilm, onClose, onExportCSV, onExportLocationsCS
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
                 {countries.map(c => (
                   <button key={"c-"+c} className="chip" style={{fontSize:11.5}}
-                    onClick={() => isolate(s => window.STORY.EPISODES.find(e => e.id === s.episode)?.country === c)}
+                    onClick={() => isolate(s => s.country === c)}
                   >{c}</button>
                 ))}
                 {groups.map(g => (

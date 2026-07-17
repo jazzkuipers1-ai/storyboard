@@ -167,10 +167,7 @@ function App() {
   const filtered = useMemo(() => {
     let list = scenes;
     if (filter.kind === "episode")  list = list.filter(s => s.episode === filter.value);
-    if (filter.kind === "country")  list = list.filter(s => {
-      const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
-      return ep?.country === filter.value;
-    });
+    if (filter.kind === "country")  list = list.filter(s => s.country === filter.value);
     if (filter.kind === "status")   list = list.filter(s => s.status === filter.value);
     if (filter.kind === "group")    list = list.filter(s => s.group === filter.value);
     if (search.trim()) {
@@ -191,8 +188,7 @@ function App() {
     const byEp = {}, byCountry = {}, byStatus = {}, byGroup = {};
     scenes.forEach(s => {
       byEp[s.episode] = (byEp[s.episode] || 0) + 1;
-      const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
-      if (ep) byCountry[ep.country] = (byCountry[ep.country] || 0) + 1;
+      if (s.country) byCountry[s.country] = (byCountry[s.country] || 0) + 1;
       byStatus[s.status] = (byStatus[s.status] || 0) + 1;
       if (s.group) byGroup[s.group] = (byGroup[s.group] || 0) + 1;
     });
@@ -478,6 +474,7 @@ function App() {
       id: `imp${++nextId}`,
       scene: p.scene,
       episode: p.episode,
+      country: p.country,
       intExt: p.intExt,
       dn: p.dn,
       slug: p.slug,
@@ -609,17 +606,19 @@ function App() {
   // ── Page head (title + stats) ──────────────────────────
   function PageHead() {
     const epCount = window.STORY.EPISODES.length;
-    const countryCount = new Set(window.STORY.EPISODES.map(e => e.country)).size;
+    const countryCount = new Set(scenes.map(s => s.country).filter(Boolean)).size;
     let title = "All scenes";
     let sub = isFilm ? `Across ${countryCount} countries` : `Across ${epCount} episodes and ${countryCount} countries`;
     if (filter.kind === "episode" && !isFilm) {
       const ep = window.STORY.EPISODES.find(e => e.id === filter.value);
       title = `EP ${ep?.n} · ${ep?.title}`;
-      sub = [ep?.country, ep?.era].filter(Boolean).join(" · ");
+      // An episode can mix countries (e.g. a flashback abroad), so list
+      // whichever ones actually show up in its scenes rather than assuming one.
+      const epCountries = [...new Set(scenes.filter(s => s.episode === filter.value).map(s => s.country).filter(Boolean))];
+      sub = epCountries.join(" · ");
     } else if (filter.kind === "country") {
       title = filter.value;
-      const ep = window.STORY.EPISODES.find(e => e.country === filter.value);
-      sub = `${counts.byCountry[filter.value] || 0} scenes${ep?.era ? ` · ${ep.era}` : ""}`;
+      sub = `${counts.byCountry[filter.value] || 0} scenes`;
     } else if (filter.kind === "status") {
       title = STATUS[filter.value]?.label;
       sub = `${counts.byStatus[filter.value] || 0} scenes`;
@@ -702,7 +701,7 @@ function App() {
       const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
       return [
         isFilm ? "" : ep?.n,
-        s.scene, s.intExt, s.dn, s.locationId || "", s.slug, s.address, ep?.country,
+        s.scene, s.intExt, s.dn, s.locationId || "", s.slug, s.address, s.country || "",
         STATUS[s.status]?.label || s.status, s.group || "", s.shootDay || "", s.notes || "", s.sceneInfo || "",
       ];
     });
@@ -731,10 +730,7 @@ function App() {
         const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
         return ep ? `${ep.n}` : "";
       }).filter(Boolean))];
-      const countries = [...new Set(c.scenes.map(s => {
-        const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
-        return ep?.country || "";
-      }).filter(Boolean))];
+      const countries = [...new Set(c.scenes.map(s => s.country || "").filter(Boolean))];
       return [c.locationId || "", c.name, c.address, c.scenes.length, isFilm ? "" : eps.join(", "), countries.join(", ")];
     });
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -913,7 +909,7 @@ function App() {
                       const ep = window.STORY.EPISODES.find(e => e.id === s.episode);
                       return (
                         <div className="mini" key={s.id} onClick={() => setOpenSceneId(s.id)} style={{cursor:"default"}}>
-                          <Placeholder country={ep?.country} hint={s.photoHint} small/>
+                          <Placeholder country={s.country} hint={s.photoHint} small/>
                           <div className="t">{s.locationId ? `${s.locationId} · ` : ""}{s.slug}</div>
                           <div className="m">{isFilm ? "" : `EP ${ep?.n} · `}SC {String(s.scene).padStart(2,"0")} · {s.intExt}/{s.dn}</div>
                         </div>
@@ -939,8 +935,8 @@ function App() {
         // crude city extraction
         const parts = s.address.split(",").map(p => p.trim());
         const city = parts[parts.length - 2] || parts[0];
-        const key = `${city}|${ep?.country}`;
-        if (!m.has(key)) m.set(key, { city, country: ep?.country, ep, scenes: [] });
+        const key = `${city}|${s.country}`;
+        if (!m.has(key)) m.set(key, { city, country: s.country, ep, scenes: [] });
         m.get(key).scenes.push(s);
       });
       return [...m.values()];

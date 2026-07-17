@@ -167,7 +167,7 @@ function SceneCard({ scene, onOpen, onUpdate, showGroup, isFilm, draggable, onDr
           <img src={coverPhoto(scene)} alt={scene.slug}
                style={{width:"100%",aspectRatio:"16 / 9",objectFit:"cover",display:"block"}}/>
         ) : (
-          <Placeholder country={ep?.country} hint={scene.photoHint} aspect="16 / 9"/>
+          <Placeholder country={scene.country} hint={scene.photoHint} aspect="16 / 9"/>
         )}
         {showGroup && scene.group ? <span className="group-label">{scene.group}</span> : null}
         {scene.comments.length > 0 ? (
@@ -284,7 +284,7 @@ function SceneRow({ scene, onOpen, onUpdate, isFilm, draggable, onDragStart, onD
         {scene.photos && scene.photos.length ? (
           <img src={coverPhoto(scene)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
         ) : (
-          <Placeholder country={ep?.country} hint={scene.photoHint} aspect="16 / 9"/>
+          <Placeholder country={scene.country} hint={scene.photoHint} aspect="16 / 9"/>
         )}
       </div>
       {!isFilm && <span className="row-ep">EP {ep?.n}</span>}
@@ -354,7 +354,7 @@ function PrintSheets({ scenes, isFilm, perPage, computePrintPages, projectName }
                       {s.photos && s.photos.length ? (
                         <img src={s.photos[0]} alt=""/>
                       ) : (
-                        <Placeholder country={ep?.country} hint={s.photoHint} aspect="16 / 9"/>
+                        <Placeholder country={s.country} hint={s.photoHint} aspect="16 / 9"/>
                       )}
                     </div>
                     <div className="print-meta">
