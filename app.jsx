@@ -384,19 +384,50 @@ function App() {
   // Retries a one-off scene write (delete/duplicate/reorder/comment) with
   // backoff until it succeeds, same as scheduleScenePatch — a save that only
   // gets one attempt can be silently lost to a single dropped connection.
+  // Registered in retryNowRef so a reconnect can kick it immediately instead
+  // of waiting out however much backoff is left.
   function withRetry(fn) {
     let delay = 1500;
+    const key = {};
     function attempt() {
       setSaveState("saving");
-      fn().then(() => setSaveState("saved")).catch(err => {
+      fn().then(() => {
+        setSaveState("saved");
+        retryNowRef.current.delete(key);
+      }).catch(err => {
         console.error("Save failed, retrying", err);
         setSaveState("error");
-        setTimeout(attempt, delay);
+        const timer = setTimeout(attempt, delay);
         delay = Math.min(delay * 2, 30000);
+        retryNowRef.current.set(key, () => { clearTimeout(timer); attempt(); });
       });
     }
     attempt();
   }
+  const retryNowRef = useRef(new Map());
+
+  // A save can keep failing even on a fine connection if the browser
+  // suspended this tab's timers for a while (mobile Safari/Chrome do this
+  // aggressively in the background) and the auth session's access token
+  // quietly expired in the meantime — every retry attempt was hitting that
+  // same stale token rather than a real network error. Refresh the session
+  // before kicking off retries, and kick them the moment the browser tells
+  // us we're back online or this tab is visible again, instead of waiting
+  // out whatever backoff delay happened to be in flight.
+  useEffect(() => {
+    async function reconnect() {
+      try { await window.SB_AUTH.getSession(); } catch (err) { console.error("Session refresh on reconnect failed", err); }
+      Object.keys(scenePatchRef.current).forEach(id => flushScenePatch(id));
+      retryNowRef.current.forEach(retry => retry());
+    }
+    function handleVisibility() { if (document.visibilityState === "visible") reconnect(); }
+    window.addEventListener("online", reconnect);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("online", reconnect);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
 
   function deleteScene(id) {
     if (!window.confirm("Delete this scene? This can't be undone.")) return;
