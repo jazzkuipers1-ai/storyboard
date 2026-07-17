@@ -133,6 +133,13 @@
     const { error } = await sb.rpc("remove_scene_photo", { p_project_id: projectId, p_scene_id: sceneId, p_photo: photo });
     if (error) throw error;
   }
+  // Same content-keyed safety as append/remove — swaps whatever the live
+  // server-side array currently has at photo±offset, instead of the client
+  // sending its own (possibly stale) full reordered arrays.
+  async function moveScenePhoto(projectId, sceneId, photo, offset) {
+    const { error } = await sb.rpc("move_scene_photo", { p_project_id: projectId, p_scene_id: sceneId, p_photo: photo, p_offset: offset });
+    if (error) throw error;
+  }
   async function reorderScenes(projectId, orderedIds) {
     const { error } = await sb.rpc("reorder_scenes", { p_project_id: projectId, p_ordered_ids: orderedIds });
     if (error) throw error;
@@ -234,7 +241,7 @@
     listProjects, getProject, createProject, updateProject, deleteProject, getProjectData, saveProjectData,
     subscribeToProjectData,
     mergeScenePatch, deleteSceneById, appendScenes, duplicateSceneAfter, reorderScenes,
-    appendScenePhoto, removeScenePhoto,
+    appendScenePhoto, removeScenePhoto, moveScenePhoto,
     listMembers, inviteMember, removeMember, sendInviteEmail,
     createShare, getSharedScenes, addSharedComment,
   };

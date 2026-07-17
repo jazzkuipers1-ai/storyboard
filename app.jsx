@@ -365,6 +365,26 @@ function App() {
     }));
     if (project?.id) withRetry(() => window.SB_DATA.removeScenePhoto(project.id, id, photo));
   }
+  function moveScenePhoto(id, photo, offset) {
+    setScenes(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      const from = (s.photos || []).indexOf(photo);
+      const to = from + offset;
+      if (from === -1 || to < 0 || to >= s.photos.length) return s;
+      const swap = arr => {
+        const copy = [...arr];
+        [copy[from], copy[to]] = [copy[to], copy[from]];
+        return copy;
+      };
+      return {
+        ...s,
+        photos: swap(s.photos),
+        photoThumbs: swap(s.photoThumbs || []),
+        photoGeo: swap(s.photoGeo || []),
+      };
+    }));
+    if (project?.id) withRetry(() => window.SB_DATA.moveScenePhoto(project.id, id, photo, offset));
+  }
   // Retries a one-off scene write (delete/duplicate/reorder/comment) with
   // backoff until it succeeds, same as scheduleScenePatch — a save that only
   // gets one attempt can be silently lost to a single dropped connection.
@@ -1128,6 +1148,7 @@ function App() {
           onUpdate={patch => updateScene(openScene.id, patch)}
           onAddPhoto={(photo, thumb, geo) => addScenePhoto(openScene.id, photo, thumb, geo)}
           onRemovePhoto={photo => removeScenePhoto(openScene.id, photo)}
+          onMovePhoto={(photo, offset) => moveScenePhoto(openScene.id, photo, offset)}
           onAddComment={c => addComment(openScene.id, c)}
           onCreateGroup={name => createGroup(name)}
           onDuplicate={() => { duplicateScene(openScene.id); setOpenSceneId(null); }}

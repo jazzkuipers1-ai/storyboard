@@ -20,7 +20,7 @@ async function reverseGeocode(lat, lng) {
   }
 }
 
-function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddPhoto, onRemovePhoto, onAddComment, onCreateGroup, onDuplicate, onDelete, onToast }) {
+function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddPhoto, onRemovePhoto, onMovePhoto, onAddComment, onCreateGroup, onDuplicate, onDelete, onToast }) {
   const ep = window.STORY.EPISODES.find(e => e.id === scene.episode);
   const [activePhoto, setActivePhoto] = useState(0);
   const [notes, setNotes] = useState(scene.notes);
@@ -122,18 +122,14 @@ function SceneDetail({ scene, groupNames = [], isFilm, onClose, onUpdate, onAddP
     setActivePhoto(Math.max(0, activePhoto - 1));
   }
   function movePhoto(from, to) {
-    if (to < 0 || to >= uploadedPhotos.length) return;
-    const reorder = (arr) => {
-      const copy = [...arr];
-      const [item] = copy.splice(from, 1);
-      copy.splice(to, 0, item);
-      return copy;
-    };
-    onUpdate({
-      photos: reorder(uploadedPhotos),
-      photoThumbs: reorder(scene.photoThumbs || []),
-      photoGeo: reorder(photoGeo),
-    });
+    if (to < 0 || to >= uploadedPhotos.length || from === to) return;
+    // A swap, done atomically server-side on whatever the live array
+    // currently is (see move_scene_photo) — same reasoning as add/remove:
+    // reordering used to recompute and send the client's whole local
+    // photos/photoThumbs/photoGeo arrays, so a collaborator dragging a
+    // reorder from a stale local copy could resurrect a photo someone else
+    // had just deleted.
+    onMovePhoto(uploadedPhotos[from], to - from);
     if (activePhoto === from) setActivePhoto(to);
   }
 
